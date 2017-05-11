@@ -1,0 +1,17 @@
+#!/bin/sh
+
+DATE=$(date +%y.%m.%d-%H:%M)
+GITIGNORETEMPLATE=/ltfs/rnd/Software/Git/altium-gitignore-template
+
+if [ -e ./.git ]
+then
+	git add --all
+	git commit -m "Update $DATE"
+else
+	cp "$GITIGNORETEMPLATE" ./.gitignore
+	git init
+	git add --all
+	git commit -m "Initial commit"
+	git config --local receive.denyCurrentBranch updateInstead
+fi
+

@@ -1,0 +1,58 @@
+#!/bin/sh
+## Create new revision from existing revision or existing working folder
+## Usage: Run mk-snapshot from within project folder
+
+## Variables
+WORKDIRNAME="working"
+REVNAME="rev-"
+
+## Get last revision and calculate new
+LAST_DES=$(ls | grep rev | tail -1 | sed -n "s/$REVNAME//; p")
+NEW_DES=$(echo $LAST_DES | tr 'a-y' 'b-z')
+if [ "$NEW_DES" = "" ]
+then
+	NEW_DES=a
+fi
+
+## Check if working dir exists and use it to create snapshot. Else, use last revision.
+## We assume that the project in $WORKDIRNAME does not have a revision, but the projects in $REVNAME-X have.
+if [ -e $WORKDIRNAME ]
+then
+        LAST_PATH="$WORKDIRNAME"
+        PRJNAME=$(ls "$LAST_PATH" | grep -o -m 1 "[A-Za-z0-9].*\.PrjPcb" | sed -n "s/.PrjPcb//p")
+else
+        LAST_PATH="${REVNAME}${LAST_DES}"
+        PRJNAME=$(ls "$LAST_PATH" | grep -o -m 1 "[A-Za-z0-9].*\.PrjPcb" | sed -n "s/-${LAST_DES}.PrjPcb//p")
+fi
+
+NEW_PATH="${REVNAME}${NEW_DES}"
+
+echo Creating "${PRJNAME} / ${NEW_PATH} from ${LAST_PATH} ..."
+mkdir "$NEW_PATH"
+
+## Copy project files that need renaming
+for i in 'PrjPcb' 'PrjPcbStructure' 'PrjPcbVariants' 
+do
+	checkfile=$(ls "$LAST_PATH" | grep "$i")
+	if [ -n "$checkfile" ]
+	then
+		cp "$LAST_PATH"/*."$i" ./"$NEW_PATH"/"$PRJNAME"-"$NEW_DES"."$i" #>/dev/null 2>&1
+	fi
+done
+
+## Copy schematics, PCBs, ... that keep their names
+for i in 'PcbDoc' 'SchDoc' 'BomDoc' 'Harness'
+do
+	checkfile=$(ls "$LAST_PATH" | grep "$i")
+	if [ -n "$checkfile" ]
+	then
+		cp "$LAST_PATH"/*."$i" ./"$NEW_PATH"
+	fi
+done
+
+## Edit Rev parameter of new project file
+## Line1: if creating from 'working', line2: if creating from 'rev-x'
+sed -i "/Name=Rev/,/Value=working/{s//Name=Rev\r\nValue=${NEW_DES}/}" ./"${NEW_PATH}/${PRJNAME}-${NEW_DES}.PrjPcb"
+sed -i "/Name=Rev/,/Value=${LAST_DES}/{s//Name=Rev\r\nValue=${NEW_DES}/}" ./"${NEW_PATH}/${PRJNAME}-${NEW_DES}.PrjPcb"
+
+echo Done.

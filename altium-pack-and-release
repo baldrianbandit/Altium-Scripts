@@ -1,0 +1,471 @@
+#!/bin/sh
+## This script packs Altium PCB manufacturing data, assembly data and docs into zip files according
+## to Laytec's ERP numbers. Brderp is the number of the PCB itself, while prjnmbr ist the number of
+## the assembled PCB.
+## Usage: Enter the Altium project's directory and run: pack-and-release <Revision>
+## Suggested Altium output jobs: Laytec_Std_Unified.OutJob and Laytec_Std_Unified-NoRM.OutJob
+## AF 22/02/2017
+VERSION=05-05-2017
+
+## Settings
+## =================================================================================================
+
+## Capture first argument
+ARG="$1"
+
+## Define working directorys
+PRJPATH="$(pwd)"
+DEFWORKPATH='"${PRJPATH}/${rev}/${OUTPUTPATH}"'
+
+## File to read / store ERP info
+ERPFILE="${PRJPATH}/.erpinfo"
+
+## Define Laytec release path
+RELEASEDPATH="/ltfs/bureau/Produkte/Dokumente/Technische Zeichnungen/RELEASED/"
+
+## Define other programs to use
+EDITOR=vim
+SOFFICE=soffice
+HTMLDOC=htmldoc
+
+## Define file extensions
+ALTIUMPDFEXT=".PDF"
+PDFEXT=".pdf"
+SPECDOCEXT=".tex"
+BOMDOCEXT=".xls"
+PPEXT=".txt"
+TEXEXT=".tex"
+
+## File name seperator
+SEP="-"
+
+## Define Altium output paths
+OUTPUTPATH="Outputs"
+BRDPATH="PCB Manufacturing"
+BRDDOCPATH="PCB Manufacturing/Docs"
+BOMPATH="PCB Assembly/BOM"
+PPPATH="PCB Assembly/Pick Place"
+ASMDOCPATH="PCB Assembly/Docs"
+SCHPATH="Schematics"
+
+## Define Altium file naming 
+SPECDESC="Spec"
+BOMDESC="BOM"
+ALTIUMSCHEXT="Schematics${ALTIUMPDFEXT}"
+ALTIUMASMEXT="Assembly${ALTIUMPDFEXT}"
+ALTIUMFABEXT="Drawings${ALTIUMPDFEXT}"
+TOPRENDER="Rendering-Top${ALTIUMPDFEXT}"
+BOTRENDER="Rendering-Bottom${ALTIUMPDFEXT}"
+
+## Define Tex paths
+TEXTEMPLATEPATH="/ltfs/rnd/Software/Tex/pcb-spec-template"
+TEXTEMPLATE="pcb-spec-template"
+VARTEMPLATE="pcb-spec-variables"
+
+## Name of the PCB specification file
+DEFSPECFILE='"${brdnmbr}${SEP}${SPECDESC}${PDFEXT}"'
+DEFSPECFILETEX='"${brdnmbr}${SEP}${SPECDESC}${TEXEXT}"'
+
+## List of files / folders containing the PCB manufacturing data
+## Removed ODB and IPC since wine has XML export issues
+DEFBRDFILESLIST='"$BRDDOCPATH/$brdnmbr$SEP$ALTIUMFABEXT":"$BRDPATH/Gerber":"$BRDPATH/GerberX2"\
+:"$BRDPATH/NC Drill":"$BRDPATH/ODB"'
+
+## List of files / folders containing pick place and bom data
+DEFPRJFILESLIST='"$BOMPATH/$curprjnmbr$SEP$BOMDESC$BOMDOCEXT"\
+:"$BOMPATH/$curprjnmbr$SEP$BOMDESC$PDFEXT":"$PPPATH/$curprjnmbr$PPEXT"\
+:"$ASMDOCPATH/$curprjnmbr$SEP$ALTIUMASMEXT"'
+
+## List of files that we do not want to get zipped
+DEFIGNOREFILESLIST='"*.OutputStatus":"Status Report.*":"*Renderings*"' 
+
+
+## Functions declaration
+## =================================================================================================
+
+## Help
+function help ()
+{
+	local arg="$1"
+        case "$arg" in
+                --help|-h)
+                        echo Laytec pack-and-release script for Altium\'s PCB manufacturing\
+                                and assembly data.
+                        echo Usage:
+                        echo '        'cd '<project directory>'
+                        echo '        'pack-and-release '<revision>'
+                        echo
+                        echo It is highly recommende to use one of the following Altium output jobs\
+                                for data generation:
+                        echo '        * Laytec_Std_Unified.Outjob'
+                        echo '        * Laytec_Std_Unified-NoRM.Outjob'
+                        echo
+                        exit
+                        ;;
+                --version|-v)
+                        echo This is pack-and-release, version "$VERSION".
+                        echo
+                        exit
+                        ;;
+                "")     
+                        echo Run pack-and-release --help for info.
+                        echo
+                        exit
+                        ;;
+                *)
+        esac
+        
+        ## Check if revision exists
+        if [ ! -e ${PRJPATH}/${arg} ]
+        then
+                echo Error: Revision "$arg" not found. Exiting.
+                echo
+                exit
+        fi
+
+	## Now since Revision $arg exists, generate global $rev and $workpath
+	rev="$arg"
+	eval workpath="$DEFWORKPATH"
+        
+}
+
+## Read the project's ERP number(s) or set them, if none
+## Brdnmbr is the number of the PCB itself, while prjnmbr is the number of the 
+## assembled PCB
+## -------------------------------------------------------------------------------------------------
+function erpinfo ()
+{
+        if [ -e "$ERPFILE" ]
+        then
+                source "$ERPFILE"
+        fi
+        echo        
+        if [ ! -z "$prjnmbr" ] && [ ! -z "$brdnmbr" ]
+        then
+                echo 'ERP board number found:' "$brdnmbr"
+                echo 'ERP project numbers found:' "$prjnmbr"
+        else
+                echo 'Enter board number: '
+                read brdnmbr
+                echo 'Enter project number(s): '
+                read prjnmbr
+                echo "brdnmbr=$brdnmbr" > "$ERPFILE"
+                echo "prjnmbr=\"$prjnmbr\"" >> "$ERPFILE"
+        fi
+}
+
+
+## Copy a file into laytec released path
+## -------------------------------------------------------------------------------------------------
+function release ()
+{
+        local path="$1"
+        local file="$2"
+        if [ -e $path/$file ]
+        then
+                echo
+                echo 'Release '"${path}/${file}"'?'
+                local yn
+                local BETARELEASE=1
+                select yn in "Yes" "No";
+                do
+                        case $yn in
+                                Yes)
+                                        cp "${path}/${file}" "$RELEASEDPATH"
+                                        echo 'Done.'
+                                        BETARELEASE=0
+                                        break;;
+                                No)
+                                        break;;
+                        esac
+                done
+                
+                if [ "$BETARELEASE" -eq 1 ]
+                then
+                        echo
+                        echo "Release as prototype?"
+                        select yn in "Yes" "No";
+                        do
+                                case $yn in
+                                        Yes)
+                                                cp "${path}/${file}" "${RELEASEDPATH}/p${file}"
+                                                echo 'Done. '
+                                                break;;
+                                        No)
+                                                break;;
+                                esac
+                        done
+                fi
+        fi
+}
+
+
+## Create a tex documentation
+## Arg1: project path; arg2: ERP_PCB; arg3: document description; arg4: file extension
+## Example: maketex "../../" "123456-000" "spec" "tex"
+## -------------------------------------------------------------------------------------------------
+function maketex ()
+{
+        local specvars="${PRJPATH}/${brdnmbr}${SEP}${SPECDESC}${SPECDOCEXT}"
+        local pdfname="${PRJPATH}/${brdnmbr}${SEP}${SPECDESC}${PDFEXT}"
+        local docdesc="$SPECDESC"
+        local printtop="${workpath}/${BRDDOCPATH}/${brdnmbr}${SEP}${TOPRENDER}"
+        local printbottom="${workpath}/${BRDDOCPATH}/${brdnmbr}${SEP}${BOTRENDER}"
+        ## That eval depends on brdnmbr and prjnmbr to be set
+	local specfile
+        eval specfile="$DEFSPECFILE"
+        
+        ## Create temporary dir with tex templates for pdf generation
+        local textmp="$PRJPATH/pcb-spec-template"
+        cp -r "$TEXTEMPLATEPATH" "$PRJPATH/"
+
+        ## Copy Altium 3d prints into temporary dir, if any
+        if [ ! -e "$printtop" ] || [ ! -e "$printbottom" ]
+        then
+                echo
+                echo Warning: Missing 3d prints:
+                echo "$printtop" and
+                echo "$printbottom"
+        else
+                cp "$printtop" "${textmp}/print-top.pdf"
+                cp "$printbottom" "${textmp}/print-bottom.pdf"
+        fi
+
+        ## Check for existing spec document
+        if [ -e $specvars ]
+        then
+                echo
+                echo Existing document found: "$specvars". Edit?
+                local yn
+                select yn in "Yes" "No"
+                do
+                        case "$yn" in
+                                Yes)         echo
+                                         echo 'Edit '"$specvars"' and select Ready.'
+                                         "$EDITOR" "$specvars"
+                                        select dc in "Ready"; 
+                                        do
+                                              case "$dc" in
+                                                        Ready)  break;;
+                                              esac
+                                        done
+                                        break;;
+                                No)        break;;
+                        esac
+                done
+        ## Or create spec document from template
+        else
+                if [ "$docdesc" == "$SPECDESC" ]
+                then
+                        echo
+                        echo Info: No spec variables found.
+                        echo Creating new "$specvars" from template.
+                        echo Edit the file and save your changes.
+                        cp "${textmp}/${VARTEMPLATE}${TEXEXT}" "$specvars"
+                        chmod +w "$specvars"
+
+                        ## Save ERP numbers in spec file
+                        eval specfiletex="$DEFSPECFILETEX"
+                        sed -i "s/000000-000/${brdnmbr}/" "${PRJPATH}/${specfiletex}" 
+                        sed -i "s/000001-000/${prjnmbr}/" "${PRJPATH}/${specfiletex}" 
+                        sleep 2
+                        "$EDITOR" "$specvars"
+                else
+                        echo
+                        echo 'Warning: No' "$docdesc" 'document' "$specvars" 'found.'
+                        echo 'Check for missing file and re-run.'
+                        exit        
+                fi
+
+        fi
+
+        ## Create working copy of variables file
+        cp "$specvars" "${textmp}/variables${TEXEXT}"
+        ## Run xelatex in temporary dir, move output pdf into project dir and delete temporary dir
+        cd "$textmp"
+        echo
+        echo "Running Xelatex. Press Ctrl-D to cancel."
+        xelatex -halt-on-error "${TEXTEMPLATE}${TEXEXT}" >/dev/null
+        cp "${TEXTEMPLATE}${PDFEXT}" "${PRJPATH}/${specfile}"
+        cp "${TEXTEMPLATE}${PDFEXT}" "${workpath}/${specfile}"
+        cd "$workpath"
+        rm -rf "$textmp"
+        echo "Done."
+}
+
+
+## Create zip archives of documentation, manufacturing data and pick and place as follows:
+## 1) Create a zip package brdnmbr with just the PCB manufacturing data
+## 2) Create a zip package prjnmbr with both PCB manufacturing data and assembly data, if available
+## -------------------------------------------------------------------------------------------------
+function zippkg ()
+{
+        local nmbr="$1"
+        local func="$2"
+
+        echo
+        echo 'Create fabrication package' "$nmbr"'?'
+        local yn
+        select yn in "Yes" "No"; 
+        do
+                case "$yn" in
+                        Yes)
+                                ## Zip fabrication data and doc
+                                echo
+                                echo 'Creating '"$nmbr"'.zip including...' 
+                                ## Generate lists of files to zip
+                                ## These vars must be evaluated, because they depend on $brdnmbr
+                                eval specfile="$DEFSPECFILE"
+                                eval brdfileslist="$DEFBRDFILESLIST"
+                                eval ignorelist="$DEFIGNOREFILESLIST"
+                                IFS=$':'
+                                local i
+                                for i in $brdfileslist
+                                do
+                                        if [ ! -e "$i" ]
+                                        then
+                                                echo Missing File: "$i"
+                                                echo Aborting.
+                                                exit
+                                        fi
+                                        echo '  '"$i"
+                                        zip -q -x "$ignorelist" -r -u "$nmbr" "$i"
+                                done
+                        
+                                ## Zip pick place data and bom
+                                case "$func" in
+                                        prj)
+                                                ## Generate list of project files to zip; 
+                                                ## this may be run several times
+                                                curprjnmbr="$nmbr"
+                                                eval prjfileslist="$DEFPRJFILESLIST"
+
+                                                IFS=$':'
+                                                local i
+                                                for i in $prjfileslist
+                                                do
+                                                        if [ ! -e "$i" ]
+                                                        then
+                                                                echo Missing File: "$i"
+                                                                echo Aborting.
+                                                                exit
+                                                        fi
+                                                        echo '  '"$i"
+                                                        zip -q -x "$ignorelist" -r -u "$nmbr" "$i"
+                                                done
+                                        ;;
+                                esac
+
+                                ## Move zip into project path and add specification pdf
+                                OLDPATH=$(pwd)
+                                mv "${nmbr}.zip" "$PRJPATH/"
+                                cd "$PRJPATH"
+                                zip -q -u "${nmbr}.zip" "$specfile"
+                                echo '  '"$specfile"
+                                cd "$OLDPATH"
+                                echo 'Done.'
+                                break;;
+                        No)
+                                break;;
+                esac
+        done
+}
+
+
+## Convert an excel document into a nice and readable pdf table using SOFFICE, in this case
+## soffice, and htmldoc
+## -------------------------------------------------------------------------------------------------
+function table2pdf ()
+{
+        local docname="$1"
+        local docext="$2"
+        local htmlname="${docname}.html"
+        local pdfname="${docname}${PDFEXT}"
+        if [ ! -e ${docname}${docext} ]
+        then
+                echo
+                echo 'Warning: No document' "${docname}${docext}" 'found.'
+                exit
+        fi
+        echo
+        echo 'Create '"$pdfname"' from '"${docname}${docext}"'?'
+        local yn
+        select yn in "Yes" "No"; 
+        do
+                case "$yn" in
+                        Yes)    ## Convert office table to html
+                                if [[ $(pgrep "$SOFFICE") > 0 ]]
+                                then
+                                        echo
+                                        echo "Warning: $SOFFICE already running!"
+                                        echo
+                                fi
+                                "$SOFFICE" --calc --convert-to html "${docname}${docext}"\
+                                >/dev/null 2>&1
+                                ## Convert html table to pdf
+                                "$HTMLDOC" --quiet --webpage --textfont Arial --bodyfont Arial\
+                                --fontsize 10 --size 297x210mm --left 10mm --top 10mm\
+                                -f "$pdfname" "$htmlname" 
+
+                                rm -f "$htmlname"
+                                break;;
+                        No)
+                                break;;
+                esac
+        done
+
+}
+
+
+## Run the script
+## =================================================================================================
+
+## Show help if needed
+help "$ARG"
+
+## Check for existing erp info or create new, if not existing
+## Set global vars 'brdnmbr' and 'prjnmbr'
+erpinfo
+
+echo
+echo '  --------------------------------------------------'
+echo '   PCB Fabrication only: '"$brdnmbr"
+echo '  --------------------------------------------------'
+
+
+## Create a new spec document from template or edit, if existing
+maketex "$PRJPATH" "$brdnmbr" "$SPECDESC" "$SPECDOCEXT"
+
+## Create zip package for pcb manufacturer
+zippkg "$brdnmbr" 'brd'
+
+## Copy this to released folder
+release "$PRJPATH" "${brdnmbr}.zip"
+
+## If there exists ERP project number, assuming that there is assembly data
+## and thus, create assembly zip package as well
+if [ "$prjnmbr" != "" ] && [ "$prjnmbr" != "--" ]
+then
+        IFS=$' '
+        for i in $prjnmbr
+        do
+                echo
+                echo '  --------------------------------------------------'
+                echo '   PCB Assembly: '"$i"
+                echo '  --------------------------------------------------'
+                cd "$BOMPATH"
+
+                ## Create pdf from bom document
+                table2pdf "$i$SEP$BOMDESC" "$BOMDOCEXT"
+
+                cd "$workpath"
+                ## Create zip package for pcb manufacturing and assembly
+                zippkg "$i" 'prj'
+
+                ## Release this
+                release "${PRJPATH}" "${i}.zip"
+
+                ## Copy schematics to released folder
+                release "${SCHPATH}" "${i}${SEP}${ALTIUMSCHEXT}"
+        done
+fi
