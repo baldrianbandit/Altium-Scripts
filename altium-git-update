@@ -2,11 +2,16 @@
 
 DATE=$(date +%y.%m.%d-%H:%M)
 GITIGNORETEMPLATE=/ltfs/rnd/Software/Git/altium-gitignore-template
+REMOTE=$(git remote show)
 
 if [ -e ./.git ]
 then
 	git add --all
 	git commit -m "Update $DATE"
+	if [ $REMOTE = origin ]
+	then
+		git push
+	fi
 else
 	cp "$GITIGNORETEMPLATE" ./.gitignore
 	git init
