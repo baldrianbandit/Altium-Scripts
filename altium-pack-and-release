@@ -1,11 +1,11 @@
 #!/bin/sh
 ## This script packs Altium PCB manufacturing data, assembly data and docs into zip files according
-## to Laytec's ERP numbers. Brderp is the number of the PCB itself, while prjnmbr ist the number of
+## to Laytec's ERP numbers. Brderp is the number of the PCB itself, while PRJNMBR ist the number of
 ## the assembled PCB.
 ## Usage: Enter the Altium project's directory and run: pack-and-release <Revision>
 ## Suggested Altium output jobs: Laytec_Std_Unified.OutJob and Laytec_Std_Unified-NoRM.OutJob
 ## AF 22/02/2017
-VERSION=05-05-2017
+VERSION=15-05-2017
 
 ## Settings
 ## =================================================================================================
@@ -43,9 +43,9 @@ SEP="-"
 OUTPUTPATH="Outputs"
 BRDPATH="Fabrication"
 BRDDOCPATH="Fabrication/Docs"
-BOMPATH="Assembly/BOM"
-PPPATH="Assembly/Pick Place"
-ASMDOCPATH="Assembly/Docs"
+DEFBOMPATH='"Assembly $CURPRJNMBR/BOM"'
+DEFPPPATH='"Assembly $CURPRJNMBR/Pick Place"'
+DEFASMDOCPATH='"Assembly $CURPRJNMBR/Docs"'
 SCHPATH="Schematics"
 
 ## Define Altium file naming 
@@ -63,18 +63,18 @@ TEXTEMPLATE="pcb-spec-template"
 VARTEMPLATE="pcb-spec-variables"
 
 ## Name of the PCB specification file
-DEFSPECFILE='"${brdnmbr}${SEP}${SPECDESC}${PDFEXT}"'
-DEFSPECFILETEX='"${brdnmbr}${SEP}${SPECDESC}${TEXEXT}"'
+DEFSPECFILE='"${BRDNMBR}${SEP}${SPECDESC}${PDFEXT}"'
+DEFSPECFILETEX='"${BRDNMBR}${SEP}${SPECDESC}${TEXEXT}"'
 
 ## List of files / folders containing the PCB manufacturing data
 ## Removed ODB and IPC since wine has XML export issues
-DEFBRDFILESLIST='"$BRDDOCPATH/$brdnmbr$SEP$ALTIUMFABEXT":"$BRDPATH/Gerber":"$BRDPATH/GerberX2"\
+DEFBRDFILESLIST='"$BRDDOCPATH/$BRDNMBR$SEP$ALTIUMFABEXT":"$BRDPATH/Gerber":"$BRDPATH/GerberX2"\
 :"$BRDPATH/NC Drill":"$BRDPATH/ODB"'
 
 ## List of files / folders containing pick place and bom data
-DEFPRJFILESLIST='"$BOMPATH/$curprjnmbr$SEP$BOMDESC$BOMDOCEXT"\
-:"$BOMPATH/$curprjnmbr$SEP$BOMDESC$PDFEXT":"$PPPATH/$curprjnmbr$PPEXT"\
-:"$ASMDOCPATH/$curprjnmbr$SEP$ALTIUMASMEXT"'
+DEFPRJFILESLIST='"$BOMPATH/$CURPRJNMBR$SEP$BOMDESC$BOMDOCEXT"\
+:"$BOMPATH/$CURPRJNMBR$SEP$BOMDESC$PDFEXT":"$PPPATH/$CURPRJNMBR$PPEXT"\
+:"$ASMDOCPATH/$CURPRJNMBR$SEP$ALTIUMASMEXT"'
 
 ## List of files that we do not want to get zipped
 DEFIGNOREFILESLIST='"*.OutputStatus":"Status Report.*":"*Renderings*"' 
@@ -130,7 +130,7 @@ function help ()
 }
 
 ## Read the project's ERP number(s) or set them, if none
-## Brdnmbr is the number of the PCB itself, while prjnmbr is the number of the 
+## Brdnmbr is the number of the PCB itself, while PRJNMBR is the number of the 
 ## assembled PCB
 ## -------------------------------------------------------------------------------------------------
 function erpinfo ()
@@ -140,17 +140,17 @@ function erpinfo ()
                 source "$ERPFILE"
         fi
         echo        
-        if [ ! -z "$prjnmbr" ] && [ ! -z "$brdnmbr" ]
+        if [ ! -z "$PRJNMBR" ] && [ ! -z "$BRDNMBR" ]
         then
-                echo 'ERP board number found:' "$brdnmbr"
-                echo 'ERP project numbers found:' "$prjnmbr"
+                echo 'ERP board number found:' "$BRDNMBR"
+                echo 'ERP project numbers found:' "$PRJNMBR"
         else
                 echo 'Enter board number: '
-                read brdnmbr
+                read BRDNMBR
                 echo 'Enter project number(s): '
-                read prjnmbr
-                echo "brdnmbr=$brdnmbr" > "$ERPFILE"
-                echo "prjnmbr=\"$prjnmbr\"" >> "$ERPFILE"
+                read PRJNMBR
+                echo "BRDNMBR=$BRDNMBR" > "$ERPFILE"
+                echo "PRJNMBR=\"$PRJNMBR\"" >> "$ERPFILE"
         fi
 }
 
@@ -206,15 +206,17 @@ function release ()
 ## -------------------------------------------------------------------------------------------------
 function maketex ()
 {
-        local specvars="${PRJPATH}/${brdnmbr}${SEP}${SPECDESC}${SPECDOCEXT}"
-        local pdfname="${PRJPATH}/${brdnmbr}${SEP}${SPECDESC}${PDFEXT}"
+        local specvars="${PRJPATH}/${BRDNMBR}${SEP}${SPECDESC}${SPECDOCEXT}"
+        local pdfname="${PRJPATH}/${BRDNMBR}${SEP}${SPECDESC}${PDFEXT}"
         local docdesc="$SPECDESC"
-        local printtop="${workpath}/${BRDDOCPATH}/${brdnmbr}${SEP}${TOPRENDER}"
-        local printbottom="${workpath}/${BRDDOCPATH}/${brdnmbr}${SEP}${BOTRENDER}"
-        ## That eval depends on brdnmbr and prjnmbr to be set
+        local printtop="${workpath}/${BRDDOCPATH}/${BRDNMBR}${SEP}${TOPRENDER}"
+        local printbottom="${workpath}/${BRDDOCPATH}/${BRDNMBR}${SEP}${BOTRENDER}"
+        ## That eval depends on BRDNMBR and PRJNMBR to be set
 	local specfile
         eval specfile="$DEFSPECFILE"
-        
+
+	cd "$PRJPATH"
+
         ## Create temporary dir with tex templates for pdf generation
         local textmp="$PRJPATH/pcb-spec-template"
         cp -r "$TEXTEMPLATEPATH" "$PRJPATH/"
@@ -240,9 +242,9 @@ function maketex ()
                 select yn in "Yes" "No"
                 do
                         case "$yn" in
-                                Yes)         echo
-                                         echo 'Edit '"$specvars"' and select Ready.'
-                                         "$EDITOR" "$specvars"
+                                Yes)	echo
+                                        echo 'Edit '"$specvars"' and select Ready.'
+                                        "$EDITOR" "$specvars"
                                         select dc in "Ready"; 
                                         do
                                               case "$dc" in
@@ -250,7 +252,7 @@ function maketex ()
                                               esac
                                         done
                                         break;;
-                                No)        break;;
+                                No)     break;;
                         esac
                 done
         ## Or create spec document from template
@@ -266,8 +268,8 @@ function maketex ()
 
                         ## Save ERP numbers in spec file
                         eval specfiletex="$DEFSPECFILETEX"
-                        sed -i "s/000000-000/${brdnmbr}/" "${PRJPATH}/${specfiletex}" 
-                        sed -i "s/000001-000/${prjnmbr}/" "${PRJPATH}/${specfiletex}" 
+                        sed -i "s/000000-000/${BRDNMBR}/" "${PRJPATH}/${specfiletex}" 
+                        sed -i "s/000001-000/${PRJNMBR}/" "${PRJPATH}/${specfiletex}" 
                         sleep 2
                         "$EDITOR" "$specvars"
                 else
@@ -295,13 +297,15 @@ function maketex ()
 
 
 ## Create zip archives of documentation, manufacturing data and pick and place as follows:
-## 1) Create a zip package brdnmbr with just the PCB manufacturing data
-## 2) Create a zip package prjnmbr with both PCB manufacturing data and assembly data, if available
+## 1) Create a zip package BRDNMBR with just the PCB manufacturing data
+## 2) Create a zip package PRJNMBR with both PCB manufacturing data and assembly data, if available
 ## -------------------------------------------------------------------------------------------------
 function zippkg ()
 {
         local nmbr="$1"
         local func="$2"
+
+	cd "$workpath"
 
         echo
         echo 'Create fabrication package' "$nmbr"'?'
@@ -314,7 +318,7 @@ function zippkg ()
                                 echo
                                 echo 'Creating '"$nmbr"'.zip including...' 
                                 ## Generate lists of files to zip
-                                ## These vars must be evaluated, because they depend on $brdnmbr
+                                ## These vars must be evaluated, because they depend on $BRDNMBR
                                 eval specfile="$DEFSPECFILE"
                                 eval brdfileslist="$DEFBRDFILESLIST"
                                 eval ignorelist="$DEFIGNOREFILESLIST"
@@ -337,9 +341,17 @@ function zippkg ()
                                         prj)
                                                 ## Generate list of project files to zip; 
                                                 ## this may be run several times
-                                                curprjnmbr="$nmbr"
+                                                CURPRJNMBR="$nmbr"
+						local BOMPATH=""
+						local PPPATH=""
+						local ASMDOCPATH=""
+						eval PPPATH="$DEFPPPATH"
+						eval ASMDOCPATH="$DEFASMDOCPATH"
+						eval BOMPATH="$DEFBOMPATH"
                                                 eval prjfileslist="$DEFPRJFILESLIST"
 
+						echo DEBUG $BOMPATH
+						echo DEBUG $prjfileslist
                                                 IFS=$':'
                                                 local i
                                                 for i in $prjfileslist
@@ -375,12 +387,16 @@ function zippkg ()
 ## Convert an excel document into a nice and readable pdf table using SOFFICE, in this case
 ## soffice, and htmldoc
 ## -------------------------------------------------------------------------------------------------
-function table2pdf ()
+function bom2pdf ()
 {
         local docname="$1"
         local docext="$2"
         local htmlname="${docname}.html"
         local pdfname="${docname}${PDFEXT}"
+	local BOMPATH=""
+	eval BOMPATH="$DEFBOMPATH"
+	cd "$BOMPATH"
+
         if [ ! -e ${docname}${docext} ]
         then
                 echo
@@ -414,58 +430,58 @@ function table2pdf ()
                 esac
         done
 
+	cd "$workpath"
+
 }
 
 
 ## Run the script
 ## =================================================================================================
 
-## Show help if needed
+## Evaluate working paths and how help if needed
 help "$ARG"
 
 ## Check for existing erp info or create new, if not existing
-## Set global vars 'brdnmbr' and 'prjnmbr'
+## Set global vars 'BRDNMBR' and 'PRJNMBR'
 erpinfo
 
 echo
 echo '  --------------------------------------------------'
-echo '   PCB Fabrication only: '"$brdnmbr"
+echo '   PCB Fabrication only: '"$BRDNMBR"
 echo '  --------------------------------------------------'
 
 
 ## Create a new spec document from template or edit, if existing
-maketex "$PRJPATH" "$brdnmbr" "$SPECDESC" "$SPECDOCEXT"
+maketex "$PRJPATH" "$BRDNMBR" "$SPECDESC" "$SPECDOCEXT"
 
 ## Create zip package for pcb manufacturer
-zippkg "$brdnmbr" 'brd'
+zippkg "$BRDNMBR" 'brd'
 
 ## Copy this to released folder
-release "$PRJPATH" "${brdnmbr}.zip"
+release "$PRJPATH" "${BRDNMBR}.zip"
 
 ## If there exists ERP project number, assuming that there is assembly data
 ## and thus, create assembly zip package as well
-if [ "$prjnmbr" != "" ] && [ "$prjnmbr" != "--" ]
+if [ "$PRJNMBR" != "" ] && [ "$PRJNMBR" != "--" ]
 then
         IFS=$' '
-        for i in $prjnmbr
+        for CURPRJNMBR in $PRJNMBR
         do
                 echo
                 echo '  --------------------------------------------------'
-                echo '   PCB Assembly: '"$i"
+                echo '   PCB Assembly: '"$CURPRJNMBR"
                 echo '  --------------------------------------------------'
-                cd "$BOMPATH"
 
                 ## Create pdf from bom document
-                table2pdf "$i$SEP$BOMDESC" "$BOMDOCEXT"
+                bom2pdf "$CURPRJNMBR$SEP$BOMDESC" "$BOMDOCEXT"
 
-                cd "$workpath"
                 ## Create zip package for pcb manufacturing and assembly
-                zippkg "$i" 'prj'
+                zippkg "$CURPRJNMBR" 'prj'
 
                 ## Release this
-                release "${PRJPATH}" "${i}.zip"
+                release "${PRJPATH}" "${CURPRJNMBR}.zip"
 
                 ## Copy schematics to released folder
-                release "${SCHPATH}" "${i}${SEP}${ALTIUMSCHEXT}"
+                release "${SCHPATH}" "${CURPRJNMBR}${SEP}${ALTIUMSCHEXT}"
         done
 fi
