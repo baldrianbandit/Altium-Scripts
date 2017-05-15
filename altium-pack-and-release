@@ -41,11 +41,11 @@ SEP="-"
 
 ## Define Altium output paths
 OUTPUTPATH="Outputs"
-BRDPATH="PCB Manufacturing"
-BRDDOCPATH="PCB Manufacturing/Docs"
-BOMPATH="PCB Assembly/BOM"
-PPPATH="PCB Assembly/Pick Place"
-ASMDOCPATH="PCB Assembly/Docs"
+BRDPATH="Fabrication"
+BRDDOCPATH="Fabrication/Docs"
+BOMPATH="Assembly/BOM"
+PPPATH="Assembly/Pick Place"
+ASMDOCPATH="Assembly/Docs"
 SCHPATH="Schematics"
 
 ## Define Altium file naming 
