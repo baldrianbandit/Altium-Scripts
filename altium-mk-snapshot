@@ -3,7 +3,7 @@
 ## Usage: Run mk-snapshot from within project folder
 
 ## Variables
-WORKDIRNAME="working"
+WORKDIRNAME="develop"
 REVNAME="rev-"
 
 ## Get last revision and calculate new
