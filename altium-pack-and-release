@@ -349,9 +349,6 @@ function zippkg ()
 						eval ASMDOCPATH="$DEFASMDOCPATH"
 						eval BOMPATH="$DEFBOMPATH"
                                                 eval prjfileslist="$DEFPRJFILESLIST"
-
-						echo DEBUG $BOMPATH
-						echo DEBUG $prjfileslist
                                                 IFS=$':'
                                                 local i
                                                 for i in $prjfileslist
