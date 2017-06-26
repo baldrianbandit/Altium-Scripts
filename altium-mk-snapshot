@@ -7,8 +7,8 @@ WORKDIRNAME="develop"
 REVNAME="rev-"
 
 ## Get last revision and calculate new
-LAST_DES=$(ls | grep rev | tail -1 | sed -n "s/$REVNAME//; p")
-NEW_DES=$(echo $LAST_DES | tr 'a-y' 'b-z')
+LAST_DES=$(ls | grep rev | tail -1 | sed -n "s/$REVNAME//p;")
+NEW_DES=$(echo $LAST_DES | tr 'a-y' 'b-z' | tr -d '0-9')
 if [ -z $NEW_DES ]
 then
 	NEW_DES=a
@@ -37,12 +37,12 @@ do
 	checkfile=$(ls "$LAST_PATH" | grep "$i")
 	if [ -n "$checkfile" ]
 	then
-		cp "$LAST_PATH"/*."$i" ./"$NEW_PATH"/"$PRJNAME"-"$NEW_DES"."$i" #>/dev/null 2>&1
+		cp "$LAST_PATH"/*."$i" ./"$NEW_PATH"/"$PRJNAME"-"$NEW_DES"."$i" 
 	fi
 done
 
 ## Copy schematics, PCBs, ... that keep their names
-for i in 'PcbDoc' 'SchDoc' 'BomDoc' 'Harness'
+for i in 'PcbDoc' 'SchDoc' 'BomDoc' 'Harness' 'OutJob'
 do
 	checkfile=$(ls "$LAST_PATH" | grep "$i")
 	if [ -n "$checkfile" ]
@@ -55,5 +55,8 @@ done
 ## Line1: if creating from 'working', line2: if creating from 'rev-x'
 sed -i "/Name=Rev/,/Value=working/{s//Name=Rev\r\nValue=${NEW_DES}/}" ./"${NEW_PATH}/${PRJNAME}-${NEW_DES}.PrjPcb"
 sed -i "/Name=Rev/,/Value=${LAST_DES}/{s//Name=Rev\r\nValue=${NEW_DES}/}" ./"${NEW_PATH}/${PRJNAME}-${NEW_DES}.PrjPcb"
+
+## Set write access to all files
+chmod -R +w "$NEW_PATH"
 
 echo Done.
