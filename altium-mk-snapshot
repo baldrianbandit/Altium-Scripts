@@ -3,7 +3,6 @@
 ## Usage: Run mk-snapshot from within project folder
 
 ## Variables
-WORKDIRNAME="develop"
 REVNAME="rev-"
 
 ## Get last revision and calculate new
@@ -14,17 +13,10 @@ then
 	NEW_DES=a
 fi
 
-## Check if working dir exists and use it to create snapshot. Else, use last revision.
-## We assume that the project in $WORKDIRNAME does not have a revision, but the projects in $REVNAME-X have.
+## Use last revision to create snapshot.
 ## The -i and /i switches of grep and sed make them case insensitive.
-if [ -e $WORKDIRNAME ]
-then
-        LAST_PATH="$WORKDIRNAME"
-        PRJNAME=$(ls "$LAST_PATH" | grep -o -i -m 1 "[A-Za-z0-9].*\.PrjPcb" | sed -n "s/.PrjPcb//ip")
-else
-        LAST_PATH="${REVNAME}${LAST_DES}"
-        PRJNAME=$(ls "$LAST_PATH" | grep -o -m 1 "[A-Za-z0-9].*\.PrjPcb" | sed -n "s/-${LAST_DES}.PrjPcb//p")
-fi
+LAST_PATH="${REVNAME}${LAST_DES}"
+PRJNAME=$(ls "$LAST_PATH" | grep -o -m 1 "[A-Za-z0-9].*\.PrjPcb" | sed -n "s/-${LAST_DES}.PrjPcb//p")
 
 NEW_PATH="${REVNAME}${NEW_DES}"
 
