@@ -5,7 +5,7 @@
 ## Usage: Enter the Altium project's directory and run: pack-and-release <Revision>
 ## Suggested Altium output jobs: Laytec_Std_Unified.OutJob and Laytec_Std_Unified-NoRM.OutJob
 ## AF 22/02/2017
-VERSION=15-05-2017
+VERSION=27-06-2017
 
 ## Settings
 ## =================================================================================================
@@ -22,6 +22,9 @@ ERPFILE="${PRJPATH}/.erpinfo"
 
 ## Define Laytec release path
 RELEASEDPATH="/ltfs/bureau/Produkte/Dokumente/Technische Zeichnungen/RELEASED/"
+
+## Define revision prefix
+REVNAME="rev-"
 
 ## Define other programs to use
 EDITOR=vim
@@ -123,8 +126,8 @@ function help ()
                 exit
         fi
 
-	## Now since Revision $arg exists, generate global $rev and $workpath
-	rev="$arg"
+	## Now since Revision $arg exists, generate global $REV and $workpath
+	REV=$(sed "s/$REVNAME//" <<< $arg)
 	eval workpath="$DEFWORKPATH"
         
 }
@@ -151,6 +154,7 @@ function erpinfo ()
                 read PRJNMBR
                 echo "BRDNMBR=$BRDNMBR" > "$ERPFILE"
                 echo "PRJNMBR=\"$PRJNMBR\"" >> "$ERPFILE"
+		echo "RELEASEDREV=none" "" "$ERPFILE"
         fi
 }
 
@@ -174,6 +178,7 @@ function release ()
                                         cp "${path}/${file}" "$RELEASEDPATH"
                                         echo 'Done.'
                                         BETARELEASE=0
+					sed -i "s/RELEASEDREV\=.*/RELEASEDREV\=$REV/" "$ERPFILE"
                                         break;;
                                 No)
                                         break;;
@@ -189,6 +194,7 @@ function release ()
                                 case $yn in
                                         Yes)
                                                 cp "${path}/${file}" "${RELEASEDPATH}/p${file}"
+						sed -i "s/RELEASEDREV\=.*/RELEASEDREV\=proto/" "$ERPFILE"
                                                 echo 'Done. '
                                                 break;;
                                         No)
