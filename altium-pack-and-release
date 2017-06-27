@@ -15,7 +15,7 @@ ARG="$1"
 
 ## Define working directorys
 PRJPATH="$(pwd)"
-DEFWORKPATH='"${PRJPATH}/${rev}/${OUTPUTPATH}"'
+DEFWORKPATH='"${PRJPATH}/${REVNAME}${REV}/${OUTPUTPATH}"'
 
 ## File to read / store ERP info
 ERPFILE="${PRJPATH}/.erpinfo"
@@ -129,6 +129,7 @@ function help ()
 	## Now since Revision $arg exists, generate global $REV and $workpath
 	REV=$(sed "s/$REVNAME//" <<< $arg)
 	eval workpath="$DEFWORKPATH"
+	echo DEBUG $workpath
         
 }
 
@@ -176,9 +177,9 @@ function release ()
                         case $yn in
                                 Yes)
                                         cp "${path}/${file}" "$RELEASEDPATH"
-                                        echo 'Done.'
                                         BETARELEASE=0
 					sed -i "s/RELEASEDREV\=.*/RELEASEDREV\=$REV/" "$ERPFILE"
+                                        echo 'Done.'
                                         break;;
                                 No)
                                         break;;
