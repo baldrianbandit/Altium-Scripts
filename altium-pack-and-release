@@ -140,6 +140,8 @@ function erpinfo ()
         if [ -e "$ERPFILE" ]
         then
                 source "$ERPFILE"
+		echo
+		echo "Info: Currently released version is ${REVNAME}${RELEASEDREV}."
         fi
         echo        
         if [ ! -z "$PRJNMBR" ] && [ ! -z "$BRDNMBR" ]
