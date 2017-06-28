@@ -49,7 +49,7 @@ BRDDOCPATH="Fabrication/Docs"
 DEFBOMPATH='"Assembly $CURPRJNMBR/BOM"'
 DEFPPPATH='"Assembly $CURPRJNMBR/Pick Place"'
 DEFASMDOCPATH='"Assembly $CURPRJNMBR/Docs"'
-SCHPATH="Schematics"
+DEFSCHPATH='"Assembly $CURPRJNMBR/Schematics"'
 
 ## Define Altium file naming 
 SPECDESC="Spec"
@@ -129,8 +129,6 @@ function help ()
 	## Now since Revision $arg exists, generate global $REV and $workpath
 	REV=$(sed "s/$REVNAME//" <<< $arg)
 	eval workpath="$DEFWORKPATH"
-	echo DEBUG $workpath
-        
 }
 
 ## Read the project's ERP number(s) or set them, if none
@@ -166,7 +164,7 @@ function release ()
 {
         local path="$1"
         local file="$2"
-        if [ -e $path/$file ]
+        if [ -e "$path/$file" ]
         then
                 echo
                 echo 'Release '"${path}/${file}"'?'
@@ -293,7 +291,7 @@ function maketex ()
         ## Run xelatex in temporary dir, move output pdf into project dir and delete temporary dir
         cd "$textmp"
         echo
-        echo "Running Xelatex. Press Ctrl-D to cancel."
+        echo "Creating documentation..."
         xelatex -halt-on-error "${TEXTEMPLATE}${TEXEXT}" >/dev/null
         cp "${TEXTEMPLATE}${PDFEXT}" "${PRJPATH}/${specfile}"
         cp "${TEXTEMPLATE}${PDFEXT}" "${workpath}/${specfile}"
@@ -309,82 +307,70 @@ function maketex ()
 ## -------------------------------------------------------------------------------------------------
 function zippkg ()
 {
-        local nmbr="$1"
-        local func="$2"
-
+        local nmbr="$1"	## Current ERP number
+        local func="$2" ## Whether to store fabrication data or assembly, too
 	cd "$workpath"
 
-        echo
-        echo 'Create fabrication package' "$nmbr"'?'
-        local yn
-        select yn in "Yes" "No"; 
-        do
-                case "$yn" in
-                        Yes)
-                                ## Zip fabrication data and doc
-                                echo
-                                echo 'Creating '"$nmbr"'.zip including...' 
-                                ## Generate lists of files to zip
-                                ## These vars must be evaluated, because they depend on $BRDNMBR
-                                eval specfile="$DEFSPECFILE"
-                                eval brdfileslist="$DEFBRDFILESLIST"
-                                eval ignorelist="$DEFIGNOREFILESLIST"
-                                IFS=$':'
-                                local i
-                                for i in $brdfileslist
-                                do
-                                        if [ ! -e "$i" ]
-                                        then
-                                                echo Missing File: "$i"
-                                                echo Aborting.
-                                                exit
-                                        fi
-                                        echo '  '"$i"
-                                        zip -q -x "$ignorelist" -r -u "$nmbr" "$i"
-                                done
-                        
-                                ## Zip pick place data and bom
-                                case "$func" in
-                                        prj)
-                                                ## Generate list of project files to zip; 
-                                                ## this may be run several times
-                                                CURPRJNMBR="$nmbr"
-						local BOMPATH=""
-						local PPPATH=""
-						local ASMDOCPATH=""
-						eval PPPATH="$DEFPPPATH"
-						eval ASMDOCPATH="$DEFASMDOCPATH"
-						eval BOMPATH="$DEFBOMPATH"
-                                                eval prjfileslist="$DEFPRJFILESLIST"
-                                                IFS=$':'
-                                                local i
-                                                for i in $prjfileslist
-                                                do
-                                                        if [ ! -e "$i" ]
-                                                        then
-                                                                echo Missing File: "$i"
-                                                                echo Aborting.
-                                                                exit
-                                                        fi
-                                                        echo '  '"$i"
-                                                        zip -q -x "$ignorelist" -r -u "$nmbr" "$i"
-                                                done
-                                        ;;
-                                esac
+	## Zip fabrication data and doc
+	echo
+	echo 'Creating fabrication package '"$nmbr"'.zip including...' 
 
-                                ## Move zip into project path and add specification pdf
-                                OLDPATH=$(pwd)
-                                mv "${nmbr}.zip" "$PRJPATH/"
-                                cd "$PRJPATH"
-                                zip -q -u "${nmbr}.zip" "$specfile"
-                                echo '  '"$specfile"
-                                cd "$OLDPATH"
-                                echo 'Done.'
-                                break;;
-                        No)
-                                break;;
-                esac
-        done
+	## Generate lists of files to zip
+	## These vars must be evaluated, because they depend on $BRDNMBR
+	eval specfile="$DEFSPECFILE"
+	eval brdfileslist="$DEFBRDFILESLIST"
+	eval ignorelist="$DEFIGNOREFILESLIST"
+	IFS=$':'
+	local i
+	for i in $brdfileslist
+	do
+		if [ ! -e "$i" ]
+		then
+			echo Missing File: "$i"
+			echo Aborting.
+			exit
+		fi
+		echo '  '"$i"
+		zip -q -x "$ignorelist" -r -u "$nmbr" "$i"
+	done
+
+	## Zip pick place data and bom
+	case "$func" in
+		prj)
+			## Generate list of project files to zip; 
+			## this may be run several times
+			CURPRJNMBR="$nmbr"
+			local BOMPATH=""
+			local PPPATH=""
+			local ASMDOCPATH=""
+			eval PPPATH="$DEFPPPATH"
+			eval ASMDOCPATH="$DEFASMDOCPATH"
+			eval BOMPATH="$DEFBOMPATH"
+			eval prjfileslist="$DEFPRJFILESLIST"
+			IFS=$':'
+			local i
+			for i in $prjfileslist
+			do
+				if [ ! -e "$i" ]
+				then
+					echo Missing File: "$i"
+					echo Aborting.
+					exit
+				fi
+				echo '  '"$i"
+				zip -q -x "$ignorelist" -r -u "$nmbr" "$i"
+			done
+		;;
+	esac
+
+	## Move zip into project path and add specification pdf
+	OLDPATH=$(pwd)
+	mv "${nmbr}.zip" "$PRJPATH/"
+	cd "$PRJPATH"
+	zip -q -u "${nmbr}.zip" "$specfile"
+	echo '  '"$specfile"
+	cd "$OLDPATH"
+	echo 'Done.'
 }
 
 
@@ -408,34 +394,23 @@ function bom2pdf ()
                 exit
         fi
         echo
-        echo 'Create '"$pdfname"' from '"${docname}${docext}"'?'
-        local yn
-        select yn in "Yes" "No"; 
-        do
-                case "$yn" in
-                        Yes)    ## Convert office table to html
-                                if [[ $(pgrep "$SOFFICE") > 0 ]]
-                                then
-                                        echo
-                                        echo "Warning: $SOFFICE already running!"
-                                        echo
-                                fi
-                                "$SOFFICE" --calc --convert-to html "${docname}${docext}"\
-                                >/dev/null 2>&1
-                                ## Convert html table to pdf
-                                "$HTMLDOC" --quiet --webpage --textfont Arial --bodyfont Arial\
-                                --fontsize 10 --size 297x210mm --left 10mm --top 10mm\
-                                -f "$pdfname" "$htmlname" 
+        echo 'Creating '"$pdfname"' from '"${docname}${docext}"'...'
+	## Convert office table to html
+	if [[ $(pgrep "$SOFFICE") > 0 ]]
+	then
+		echo
+		echo "Warning: $SOFFICE already running!"
+		echo
+	fi
+	"$SOFFICE" --calc --convert-to html "${docname}${docext}"\
+	>/dev/null 2>&1
+	## Convert html table to pdf
+	"$HTMLDOC" --quiet --webpage --textfont Arial --bodyfont Arial\
+	--fontsize 10 --size 297x210mm --left 10mm --top 10mm\
+	-f "$pdfname" "$htmlname" 
 
-                                rm -f "$htmlname"
-                                break;;
-                        No)
-                                break;;
-                esac
-        done
-
+	rm -f "$htmlname"
 	cd "$workpath"
-
 }
 
 
@@ -451,7 +426,7 @@ erpinfo
 
 echo
 echo '  --------------------------------------------------'
-echo '   PCB Fabrication only: '"$BRDNMBR"
+echo '   PCB Fabrication: '"$BRDNMBR"
 echo '  --------------------------------------------------'
 
 
@@ -482,10 +457,11 @@ then
                 ## Create zip package for pcb manufacturing and assembly
                 zippkg "$CURPRJNMBR" 'prj'
 
-                ## Release this
+                ## Release manufacturing data
                 release "${PRJPATH}" "${CURPRJNMBR}.zip"
 
-                ## Copy schematics to released folder
+                ## Release schematics
+		eval SCHPATH="$DEFSCHPATH"
                 release "${SCHPATH}" "${CURPRJNMBR}${SEP}${ALTIUMSCHEXT}"
         done
 fi
