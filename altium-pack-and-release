@@ -411,6 +411,7 @@ function bom2pdf ()
 
 	rm -f "$htmlname"
 	cd "$workpath"
+	echo 'Done.'
 }
 
 
