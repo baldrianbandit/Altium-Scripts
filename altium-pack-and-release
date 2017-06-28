@@ -140,22 +140,28 @@ function erpinfo ()
         if [ -e "$ERPFILE" ]
         then
                 source "$ERPFILE"
-		echo
-		echo "Info: Currently released version is ${REVNAME}${RELEASEDREV}."
         fi
-        echo        
+
         if [ ! -z "$PRJNMBR" ] && [ ! -z "$BRDNMBR" ]
         then
+		echo
                 echo 'ERP board number found:' "$BRDNMBR"
-                echo 'ERP project numbers found:' "$PRJNMBR"
+                echo 'ERP assembly numbers found:' "$PRJNMBR"
+		if [ -z $RELEASEDREV ]
+		then
+			echo "RELEASEDREV=none" >> "$ERPFILE"
+		fi
+		echo "Currently released revision: ${REVNAME}${RELEASEDREV}"
         else
+		echo
+		echo 'Missing ERP information.'
                 echo 'Enter board number: '
                 read BRDNMBR
-                echo 'Enter project number(s): '
+                echo 'Enter assembly number(s) seperated by spaces: '
                 read PRJNMBR
                 echo "BRDNMBR=$BRDNMBR" > "$ERPFILE"
                 echo "PRJNMBR=\"$PRJNMBR\"" >> "$ERPFILE"
-		echo "RELEASEDREV=none" "" "$ERPFILE"
+		echo "RELEASEDREV=none" >> "$ERPFILE"
         fi
 }
 
@@ -224,22 +230,6 @@ function maketex ()
 
 	cd "$PRJPATH"
 
-        ## Create temporary dir with tex templates for pdf generation
-        local textmp="$PRJPATH/pcb-spec-template"
-        cp -r "$TEXTEMPLATEPATH" "$PRJPATH/"
-
-        ## Copy Altium 3d prints into temporary dir, if any
-        if [ ! -e "$printtop" ] || [ ! -e "$printbottom" ]
-        then
-                echo
-                echo Warning: Missing 3d prints:
-                echo "$printtop" and
-                echo "$printbottom"
-        else
-                cp "$printtop" "${textmp}/print-top.pdf"
-                cp "$printbottom" "${textmp}/print-bottom.pdf"
-        fi
-
         ## Check for existing spec document
         if [ -e $specvars ]
         then
@@ -286,6 +276,22 @@ function maketex ()
                         exit        
                 fi
 
+        fi
+
+        ## Create temporary dir with tex templates for pdf generation
+        local textmp="$PRJPATH/pcb-spec-template"
+        cp -r "$TEXTEMPLATEPATH" "$PRJPATH/"
+
+        ## Copy Altium 3d prints into temporary dir, if any
+        if [ ! -e "$printtop" ] || [ ! -e "$printbottom" ]
+        then
+                echo
+                echo Warning: Missing 3d prints:
+                echo "$printtop" and
+                echo "$printbottom"
+        else
+                cp "$printtop" "${textmp}/print-top.pdf"
+                cp "$printbottom" "${textmp}/print-bottom.pdf"
         fi
 
         ## Create working copy of variables file
