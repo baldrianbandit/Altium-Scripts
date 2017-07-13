@@ -228,6 +228,11 @@ function maketex ()
 	local specfile
         eval specfile="$DEFSPECFILE"
 
+
+        ## Create temporary dir with tex templates for pdf generation
+        local textmp="$PRJPATH/pcb-spec-template"
+        cp -r "$TEXTEMPLATEPATH" "$PRJPATH/"
+
 	cd "$PRJPATH"
 
         ## Check for existing spec document
@@ -278,9 +283,6 @@ function maketex ()
 
         fi
 
-        ## Create temporary dir with tex templates for pdf generation
-        local textmp="$PRJPATH/pcb-spec-template"
-        cp -r "$TEXTEMPLATEPATH" "$PRJPATH/"
 
         ## Copy Altium 3d prints into temporary dir, if any
         if [ ! -e "$printtop" ] || [ ! -e "$printbottom" ]
