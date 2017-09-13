@@ -222,8 +222,10 @@ function maketex ()
         local specvars="${PRJPATH}/${BRDNMBR}${SEP}${SPECDESC}${SPECDOCEXT}"
         local pdfname="${PRJPATH}/${BRDNMBR}${SEP}${SPECDESC}${PDFEXT}"
         local docdesc="$SPECDESC"
-        local printtop="${workpath}/${BRDDOCPATH}/${BRDNMBR}${SEP}${TOPRENDER}"
-        local printbottom="${workpath}/${BRDDOCPATH}/${BRDNMBR}${SEP}${BOTRENDER}"
+	## Here we generate the Assembly path for embedding of rendering
+	local CURPRJNMBR="$PRJNMBR"
+	eval ASMDOCPATH="$DEFASMDOCPATH"
+        local renderings="${workpath}/${ASMDOCPATH}/${PRJNMBR}${SEP}${ALTIUMASMEXT}"
         ## That eval depends on BRDNMBR and PRJNMBR to be set
 	local specfile
         eval specfile="$DEFSPECFILE"
@@ -285,15 +287,14 @@ function maketex ()
 
 
         ## Copy Altium 3d prints into temporary dir, if any
-        if [ ! -e "$printtop" ] || [ ! -e "$printbottom" ]
+        if [ ! -e "$renderings" ]
         then
                 echo
-                echo Warning: Missing 3d prints:
-                echo "$printtop" and
-                echo "$printbottom"
+                echo Error: Missing 3d prints:
+                echo "$renderings"
+		exit
         else
-                cp "$printtop" "${textmp}/print-top.pdf"
-                cp "$printbottom" "${textmp}/print-bottom.pdf"
+                cp "$renderings" "${textmp}/renderings.pdf"
         fi
 
         ## Create working copy of variables file
@@ -302,7 +303,7 @@ function maketex ()
         cd "$textmp"
         echo
         echo "Creating documentation..."
-        xelatex -halt-on-error "${TEXTEMPLATE}${TEXEXT}" >/dev/null
+        xelatex -halt-on-error "${TEXTEMPLATE}${TEXEXT}" #>/dev/null
         cp "${TEXTEMPLATE}${PDFEXT}" "${PRJPATH}/${specfile}"
         cp "${TEXTEMPLATE}${PDFEXT}" "${workpath}/${specfile}"
         cd "$workpath"
