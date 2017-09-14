@@ -5,7 +5,7 @@
 ## Usage: Enter the Altium project's directory and run: pack-and-release <Revision>
 ## Suggested Altium output jobs: Laytec_Std_Unified.OutJob and Laytec_Std_Unified-NoRM.OutJob
 ## AF 22/02/2017
-VERSION=27-06-2017
+VERSION=14-09-2017
 
 ## Settings
 ## =================================================================================================
@@ -62,11 +62,14 @@ BOTRENDER="Rendering-Bottom${ALTIUMPDFEXT}"
 
 ## Define Tex paths
 TEXTEMPLATEPATH="/ltfs/rnd/Software/Tex/pcb-spec-template"
-TEXTEMPLATE="pcb-spec-template"
-VARTEMPLATE="pcb-spec-variables"
+PCBTEXTEMPLATE="pcb-spec-template"
+PCBVARTEMPLATE="pcb-spec-variables"
+ASMTEXTEMPLATE="assembly-spec-template"
+ASMVARTEMPLATE="assembly-spec-variables"
 
 ## Name of the PCB specification file
-DEFSPECFILE='"${BRDNMBR}${SEP}${SPECDESC}${PDFEXT}"'
+DEFPCBSPECFILE='"${BRDNMBR}${SEP}BRD${PDFEXT}"'
+DEFASMSPECFILE='"${CURPRJNMBR}${SEP}ASM${PDFEXT}"'
 DEFSPECFILETEX='"${BRDNMBR}${SEP}${SPECDESC}${TEXEXT}"'
 
 ## List of files / folders containing the PCB manufacturing data
@@ -219,21 +222,34 @@ function release ()
 ## -------------------------------------------------------------------------------------------------
 function maketex ()
 {
-        local specvars="${PRJPATH}/${BRDNMBR}${SEP}${SPECDESC}${SPECDOCEXT}"
-        local pdfname="${PRJPATH}/${BRDNMBR}${SEP}${SPECDESC}${PDFEXT}"
-        local docdesc="$SPECDESC"
-	## Here we generate the Assembly path for embedding of rendering
-	local CURPRJNMBR="$PRJNMBR"
-	eval ASMDOCPATH="$DEFASMDOCPATH"
-        local renderings="${workpath}/${ASMDOCPATH}/${PRJNMBR}${SEP}${ALTIUMASMEXT}"
-        ## That eval depends on BRDNMBR and PRJNMBR to be set
-	local specfile
-        eval specfile="$DEFSPECFILE"
+	## New stuff
+	local DOCTYPE=$1
+	local NMBR=$2
+	case $DOCTYPE in
+		PCB)
+			## Here we generate the Assembly path for embedding of rendering
+			local renderings="${workpath}/${BRDDOCPATH}/${NMBR}${SEP}${ALTIUMFABEXT}"
+			local specfile
+			eval specfile="$DEFPCBSPECFILE"
+			;;
+		ASM)
+			## Here we generate the Assembly path for embedding of rendering
+			local CURPRJNMBR="$NMBR"
+			eval ASMDOCPATH="$DEFASMDOCPATH"
+			local renderings="${workpath}/${ASMDOCPATH}/${NMBR}${SEP}${ALTIUMASMEXT}"
+			local specfile
+			eval specfile="$DEFASMSPECFILE"
+			;;
+	esac
+	## /New stuff
+
+        local specvars="${PRJPATH}/${BRDNMBR}${SEP}${SPECDESC}${SPECDOCEXT}"	# ./123456-000-Spec.tex
+        local pdfname="${PRJPATH}/${NMBR}${SEP}${SPECDESC}${PDFEXT}"		# ./123456-000-Spec.pdf
 
 
         ## Create temporary dir with tex templates for pdf generation
-        local textmp="$PRJPATH/pcb-spec-template"
-        cp -r "$TEXTEMPLATEPATH" "$PRJPATH/"
+        local textmp="${PRJPATH}/textmp"
+        cp -r "${TEXTEMPLATEPATH}/." "$textmp/"
 
 	cd "$PRJPATH"
 
@@ -261,28 +277,19 @@ function maketex ()
                 done
         ## Or create spec document from template
         else
-                if [ "$docdesc" == "$SPECDESC" ]
-                then
-                        echo
-                        echo Info: No spec variables found.
-                        echo Creating new "$specvars" from template.
-                        echo Edit the file and save your changes.
-                        cp "${textmp}/${VARTEMPLATE}${TEXEXT}" "$specvars"
-                        chmod +w "$specvars"
+		echo
+		echo Info: No spec variables found.
+		echo Creating new "$specvars" from template.
+		echo Edit the file and save your changes.
+		cp "${textmp}/${PCBVARTEMPLATE}${TEXEXT}" "$specvars"
+		chmod +w "$specvars"
 
-                        ## Save ERP numbers in spec file
-                        eval specfiletex="$DEFSPECFILETEX"
-                        sed -i "s/000000-000/${BRDNMBR}/" "${PRJPATH}/${specfiletex}" 
-                        sed -i "s/000001-000/${PRJNMBR}/" "${PRJPATH}/${specfiletex}" 
-                        sleep 2
-                        "$EDITOR" "$specvars"
-                else
-                        echo
-                        echo 'Warning: No' "$docdesc" 'document' "$specvars" 'found.'
-                        echo 'Check for missing file and re-run.'
-                        exit        
-                fi
-
+		## Save ERP numbers in spec file
+		eval specfiletex="$DEFSPECFILETEX"
+		sed -i "s/000000-000/${BRDNMBR}/" "${PRJPATH}/${specfiletex}" 
+		sed -i "s/000001-000/${PRJNMBR}/" "${PRJPATH}/${specfiletex}" 
+		sleep 2
+		"$EDITOR" "$specvars"
         fi
 
 
@@ -303,9 +310,18 @@ function maketex ()
         cd "$textmp"
         echo
         echo "Creating documentation..."
-        xelatex -halt-on-error "${TEXTEMPLATE}${TEXEXT}" #>/dev/null
-        cp "${TEXTEMPLATE}${PDFEXT}" "${PRJPATH}/${specfile}"
-        cp "${TEXTEMPLATE}${PDFEXT}" "${workpath}/${specfile}"
+	case $DOCTYPE in
+		PCB)
+			xelatex -halt-on-error "${PCBTEXTEMPLATE}${TEXEXT}" #>/dev/null
+			cp "${PCBTEXTEMPLATE}${PDFEXT}" "${PRJPATH}/${specfile}"
+			cp "${PCBTEXTEMPLATE}${PDFEXT}" "${workpath}/${specfile}"
+			;;
+		ASM)
+			xelatex -halt-on-error "${ASMTEXTEMPLATE}${TEXEXT}" #>/dev/null
+			cp "${ASMTEXTEMPLATE}${PDFEXT}" "${PRJPATH}/${specfile}"
+			cp "${ASMTEXTEMPLATE}${PDFEXT}" "${workpath}/${specfile}"
+			;;
+	esac
         cd "$workpath"
         rm -rf "$textmp"
         echo "Done."
@@ -328,9 +344,13 @@ function zippkg ()
 
 	## Generate lists of files to zip
 	## These vars must be evaluated, because they depend on $BRDNMBR
-	eval specfile="$DEFSPECFILE"
+	eval specfile1="$DEFPCBSPECFILE"
+	eval specfile2="$DEFASMSPECFILE"
 	eval brdfileslist="$DEFBRDFILESLIST"
 	eval ignorelist="$DEFIGNOREFILESLIST"
+	local CURPRJNMBR
+
+	## First step: Create zip with contents in $brdfileslist
 	IFS=$':'
 	local i
 	for i in $brdfileslist
@@ -344,8 +364,11 @@ function zippkg ()
 		echo '  '"$i"
 		zip -q -x "$ignorelist" -r -u "$nmbr" "$i"
 	done
+	## Add pcb spec document
+	zip -q -u "${nmbr}.zip" "$specfile1" 
+	echo '  '"$specfile1"
 
-	## Zip pick place data and bom
+	## Second step: Zip pick place data and bom
 	case "$func" in
 		prj)
 			## Generate list of project files to zip; 
@@ -371,16 +394,14 @@ function zippkg ()
 				echo '  '"$i"
 				zip -q -x "$ignorelist" -r -u "$nmbr" "$i"
 			done
+			## Add assembly spec document
+			zip -q -u "${nmbr}.zip" "$specfile2" 
+			echo '  '"$specfile2"
 		;;
 	esac
 
 	## Move zip into project path and add specification pdf
-	OLDPATH=$(pwd)
 	mv "${nmbr}.zip" "$PRJPATH/"
-	cd "$PRJPATH"
-	zip -q -u "${nmbr}.zip" "$specfile"
-	echo '  '"$specfile"
-	cd "$OLDPATH"
 	echo 'Done.'
 }
 
@@ -443,7 +464,7 @@ echo '  --------------------------------------------------'
 
 
 ## Create a new spec document from template or edit, if existing
-maketex "$PRJPATH" "$BRDNMBR" "$SPECDESC" "$SPECDOCEXT"
+maketex PCB "$BRDNMBR"
 
 ## Create zip package for pcb manufacturer
 zippkg "$BRDNMBR" 'brd'
@@ -462,6 +483,9 @@ then
                 echo '  --------------------------------------------------'
                 echo '   PCB Assembly: '"$CURPRJNMBR"
                 echo '  --------------------------------------------------'
+
+		## Create a new spec document from template or edit, if existing
+		maketex ASM "$CURPRJNMBR"
 
                 ## Create pdf from bom document
                 bom2pdf "$CURPRJNMBR$SEP$BOMDESC" "$BOMDOCEXT"
