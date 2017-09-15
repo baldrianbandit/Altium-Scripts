@@ -68,9 +68,10 @@ ASMTEXTEMPLATE="assembly-spec-template"
 ASMVARTEMPLATE="assembly-spec-variables"
 
 ## Name of the PCB specification file
-DEFPCBSPECFILE='"${BRDNMBR}${SEP}BRD${PDFEXT}"'
+DEFPCBSPECFILE='"${BRDNMBR}${SEP}PCB${PDFEXT}"'
 DEFASMSPECFILE='"${CURPRJNMBR}${SEP}ASM${PDFEXT}"'
-DEFSPECFILETEX='"${BRDNMBR}${SEP}${SPECDESC}${TEXEXT}"'
+DEFPCBVARSTEX='"${BRDNMBR}${SEP}${SPECDESC}${TEXEXT}"'
+DEFASMVARSTEX='"${CURPRJNMBR}${SEP}${SPECDESC}${TEXEXT}"'
 
 ## List of files / folders containing the PCB manufacturing data
 ## Removed ODB and IPC since wine has XML export issues
@@ -92,8 +93,8 @@ DEFIGNOREFILESLIST='"*.OutputStatus":"Status Report.*":"*Renderings*"'
 ## Help
 function help ()
 {
-	local arg="$1"
-        case "$arg" in
+	local ARG="$1"
+        case "$ARG" in
                 --help|-h)
                         echo Laytec pack-and-release script for Altium\'s PCB manufacturing\
                                 and assembly data.
@@ -120,18 +121,25 @@ function help ()
                         ;;
                 *)
         esac
-        
+}
+
+## Set global prject path $PRJPATH and working path $WORKPATH
+## PRJPATH is the parent project folder, in which the revisions rev-a ... rev-z are to be find, e.g. 123456-NewCard
+## WORKPATH is the output folder, to which Altium outputs the fabrication data, e.g. $PRJPATH/rev-a/Outputs
+function setpaths ()
+{
+	local ARG="$1"
         ## Check if revision exists
-        if [ ! -e ${PRJPATH}/${arg} ]
+        if [ ! -e ${PRJPATH}/${ARG} ]
         then
-                echo Error: Revision "$arg" not found. Exiting.
+                echo Error: Revision "$ARG" not found. Exiting.
                 echo
                 exit
         fi
 
-	## Now since Revision $arg exists, generate global $REV and $workpath
-	REV=$(sed "s/$REVNAME//" <<< $arg)
-	eval workpath="$DEFWORKPATH"
+	## Now since Revision $arg exists, generate global $REV and $WORKPATH
+	REV=$(sed "s/$REVNAME//" <<< $ARG)
+	eval WORKPATH="$DEFWORKPATH"
 }
 
 ## Read the project's ERP number(s) or set them, if none
@@ -148,13 +156,21 @@ function erpinfo ()
         if [ ! -z "$PRJNMBR" ] && [ ! -z "$BRDNMBR" ]
         then
 		echo
-                echo 'ERP board number found:' "$BRDNMBR"
-                echo 'ERP assembly numbers found:' "$PRJNMBR"
+                echo 'PCB ERP number found:'
+		echo "$BRDNMBR"
+		echo
+                echo 'Assembly ERP numbers found:'
+		local i; IFS=$' '
+		for i in $PRJNMBR; do
+			echo $i
+		done
+		echo
 		if [ -z $RELEASEDREV ]
 		then
 			echo "RELEASEDREV=none" >> "$ERPFILE"
 		fi
-		echo "Currently released revision: ${REVNAME}${RELEASEDREV}"
+		echo 'Currently released revision:'
+		echo "${REVNAME}${RELEASEDREV}"
         else
 		echo
 		echo 'Missing ERP information.'
@@ -222,49 +238,53 @@ function release ()
 ## -------------------------------------------------------------------------------------------------
 function maketex ()
 {
-	## New stuff
 	local DOCTYPE=$1
-	local NMBR=$2
-	case $DOCTYPE in
-		PCB)
-			## Here we generate the Assembly path for embedding of rendering
-			local renderings="${workpath}/${BRDDOCPATH}/${NMBR}${SEP}${ALTIUMFABEXT}"
-			local specfile
-			eval specfile="$DEFPCBSPECFILE"
-			;;
-		ASM)
-			## Here we generate the Assembly path for embedding of rendering
-			local CURPRJNMBR="$NMBR"
-			eval ASMDOCPATH="$DEFASMDOCPATH"
-			local renderings="${workpath}/${ASMDOCPATH}/${NMBR}${SEP}${ALTIUMASMEXT}"
-			local specfile
-			eval specfile="$DEFASMSPECFILE"
-			;;
-	esac
-	## /New stuff
-
-        local specvars="${PRJPATH}/${BRDNMBR}${SEP}${SPECDESC}${SPECDOCEXT}"	# ./123456-000-Spec.tex
-        local pdfname="${PRJPATH}/${NMBR}${SEP}${SPECDESC}${PDFEXT}"		# ./123456-000-Spec.pdf
-
+	local CURPRJNMBR=$2
+	local PCBSPECFILE
+	local ASMSPECFILE
+	local PCBVARS
+	local ASMVARS
+	eval PCBSPECFILE="$DEFPCBSPECFILE"
+	eval ASMSPECFILE="$DEFASMSPECFILE"
+	eval PCBVARS="$DEFPCBVARSTEX"
+	eval ASMVARS="$DEFASMVARSTEX"
+	eval ASMDOCPATH="$DEFASMDOCPATH"
+	local PCBRENDERINGS="${WORKPATH}/${BRDDOCPATH}/${BRDNMBR}${SEP}${ALTIUMFABEXT}"
+	local ASMRENDERINGS="${WORKPATH}/${ASMDOCPATH}/${CURPRJNMBR}${SEP}${ALTIUMASMEXT}"
 
         ## Create temporary dir with tex templates for pdf generation
         local textmp="${PRJPATH}/textmp"
         cp -r "${TEXTEMPLATEPATH}/." "$textmp/"
 
+	## Set variables for current document
 	cd "$PRJPATH"
+	case $DOCTYPE in
+		PCB)
+			local curvars=$PCBVARS
+			local curtemplate=${PCBVARTEMPLATE}
+			local currenderings=$PCBRENDERINGS
+			local curnmbr=$BRDNMBR
+			;;
+		ASM)
+			local curvars=$ASMVARS
+			local curtemplate=${ASMVARTEMPLATE}
+			local currenderings=$ASMRENDERINGS
+			local curnmbr=$CURPRJNMBR
+			;;
+	esac
 
         ## Check for existing spec document
-        if [ -e $specvars ]
+        if [ -e $curvars ]
         then
                 echo
-                echo Existing document found: "$specvars". Edit?
+                echo Existing document found: "$curvars". Edit?
                 local yn
                 select yn in "Yes" "No"
                 do
                         case "$yn" in
                                 Yes)	echo
-                                        echo 'Edit '"$specvars"' and select Ready.'
-                                        "$EDITOR" "$specvars"
+                                        echo 'Edit '"$curvars"' and select Ready.'
+                                        "$EDITOR" "$curvars"
                                         select dc in "Ready"; 
                                         do
                                               case "$dc" in
@@ -275,54 +295,54 @@ function maketex ()
                                 No)     break;;
                         esac
                 done
+
         ## Or create spec document from template
         else
 		echo
 		echo Info: No spec variables found.
-		echo Creating new "$specvars" from template.
+		echo Creating new "$curvars" from template.
 		echo Edit the file and save your changes.
-		cp "${textmp}/${PCBVARTEMPLATE}${TEXEXT}" "$specvars"
-		chmod +w "$specvars"
+		cp "${textmp}/${curtemplate}${TEXEXT}" "$curvars"
+		chmod +w "$curvars"
 
 		## Save ERP numbers in spec file
-		eval specfiletex="$DEFSPECFILETEX"
-		sed -i "s/000000-000/${BRDNMBR}/" "${PRJPATH}/${specfiletex}" 
-		sed -i "s/000001-000/${PRJNMBR}/" "${PRJPATH}/${specfiletex}" 
+		sed -i "s/000000-000/${curnmbr}/" "${PRJPATH}/${curvars}" 
 		sleep 2
-		"$EDITOR" "$specvars"
+		"$EDITOR" "$curvars"
         fi
 
-
-        ## Copy Altium 3d prints into temporary dir, if any
-        if [ ! -e "$renderings" ]
+        ## Copy Altium 3d prints into temporary dir
+        if [ ! -e "$currenderings" ]
         then
                 echo
                 echo Error: Missing 3d prints:
-                echo "$renderings"
+                echo "$currenderings"
 		exit
         else
-                cp "$renderings" "${textmp}/renderings.pdf"
+                cp "$currenderings" "${textmp}/renderings.pdf"
         fi
 
-        ## Create working copy of variables file
-        cp "$specvars" "${textmp}/variables${TEXEXT}"
         ## Run xelatex in temporary dir, move output pdf into project dir and delete temporary dir
         cd "$textmp"
         echo
-        echo "Creating documentation..."
 	case $DOCTYPE in
 		PCB)
-			xelatex -halt-on-error "${PCBTEXTEMPLATE}${TEXEXT}" #>/dev/null
-			cp "${PCBTEXTEMPLATE}${PDFEXT}" "${PRJPATH}/${specfile}"
-			cp "${PCBTEXTEMPLATE}${PDFEXT}" "${workpath}/${specfile}"
+			echo "Creating documentation ${PCBSPECFILE}..."
+			cp "${PRJPATH}/$PCBVARS" "${textmp}/variables${TEXEXT}"
+			xelatex -halt-on-error "${PCBTEXTEMPLATE}${TEXEXT}" >/dev/null
+			cp "${PCBTEXTEMPLATE}${PDFEXT}" "${PRJPATH}/${PCBSPECFILE}"
+			cp "${PCBTEXTEMPLATE}${PDFEXT}" "${WORKPATH}/${PCBSPECFILE}"
 			;;
 		ASM)
-			xelatex -halt-on-error "${ASMTEXTEMPLATE}${TEXEXT}" #>/dev/null
-			cp "${ASMTEXTEMPLATE}${PDFEXT}" "${PRJPATH}/${specfile}"
-			cp "${ASMTEXTEMPLATE}${PDFEXT}" "${workpath}/${specfile}"
+			echo "Creating documentation ${ASMSPECFILE}..."
+			cp "${PRJPATH}/$PCBVARS" "${textmp}/variables${TEXEXT}"
+			cp "${PRJPATH}/$ASMVARS" "${textmp}/assemblynotes${TEXEXT}"
+			xelatex -halt-on-error "${ASMTEXTEMPLATE}${TEXEXT}" >/dev/null
+			cp "${ASMTEXTEMPLATE}${PDFEXT}" "${PRJPATH}/${ASMSPECFILE}"
+			cp "${ASMTEXTEMPLATE}${PDFEXT}" "${WORKPATH}/${ASMSPECFILE}"
 			;;
 	esac
-        cd "$workpath"
+        cd "$WORKPATH"
         rm -rf "$textmp"
         echo "Done."
 }
@@ -334,26 +354,29 @@ function maketex ()
 ## -------------------------------------------------------------------------------------------------
 function zippkg ()
 {
-        local nmbr="$1"	## Current ERP number
-        local func="$2" ## Whether to store fabrication data or assembly, too
-	cd "$workpath"
+        local FUNC="$1" ## Whether to store fabrication data or assembly, too
+        local CURPRJNMBR="$2"	## Current ERP number
+	cd "$WORKPATH"
 
 	## Zip fabrication data and doc
 	echo
-	echo 'Creating fabrication package '"$nmbr"'.zip including...' 
+	echo 'Creating fabrication package '"$CURPRJNMBR"'.zip including...' 
 
 	## Generate lists of files to zip
 	## These vars must be evaluated, because they depend on $BRDNMBR
-	eval specfile1="$DEFPCBSPECFILE"
-	eval specfile2="$DEFASMSPECFILE"
-	eval brdfileslist="$DEFBRDFILESLIST"
-	eval ignorelist="$DEFIGNOREFILESLIST"
-	local CURPRJNMBR
+	local SPECFILE1
+	local SPECFILE2
+	local BRDFILESLIST
+	local IGNORELIST
+	eval SPECFILE1="$DEFPCBSPECFILE"
+	eval SPECFILE2="$DEFASMSPECFILE"
+	eval BRDFILESLIST="$DEFBRDFILESLIST"
+	eval IGNORELIST="$DEFIGNOREFILESLIST"
 
-	## First step: Create zip with contents in $brdfileslist
+	## First step: Create zip with contents in $BRDFILESLIST
 	IFS=$':'
 	local i
-	for i in $brdfileslist
+	for i in $BRDFILESLIST
 	do
 		if [ ! -e "$i" ]
 		then
@@ -362,18 +385,14 @@ function zippkg ()
 			exit
 		fi
 		echo '  '"$i"
-		zip -q -x "$ignorelist" -r -u "$nmbr" "$i"
+		zip -q -x "$IGNORELIST" -r -u "$CURPRJNMBR" "$i"
 	done
-	## Add pcb spec document
-	zip -q -u "${nmbr}.zip" "$specfile1" 
-	echo '  '"$specfile1"
 
 	## Second step: Zip pick place data and bom
-	case "$func" in
-		prj)
+	case "$FUNC" in
+		ASM)
 			## Generate list of project files to zip; 
 			## this may be run several times
-			CURPRJNMBR="$nmbr"
 			local BOMPATH=""
 			local PPPATH=""
 			local ASMDOCPATH=""
@@ -392,16 +411,20 @@ function zippkg ()
 					exit
 				fi
 				echo '  '"$i"
-				zip -q -x "$ignorelist" -r -u "$nmbr" "$i"
+				zip -q -x "$IGNORELIST" -r -u "$CURPRJNMBR" "$i"
 			done
 			## Add assembly spec document
-			zip -q -u "${nmbr}.zip" "$specfile2" 
-			echo '  '"$specfile2"
+			zip -q -u "${CURPRJNMBR}.zip" "$SPECFILE2" 
+			echo '  '"$SPECFILE2"
 		;;
 	esac
 
+	## Add pcb spec document
+	zip -q -u "${CURPRJNMBR}.zip" "$SPECFILE1" 
+	echo '  '"$SPECFILE1"
+
 	## Move zip into project path and add specification pdf
-	mv "${nmbr}.zip" "$PRJPATH/"
+	#mv "${CURPRJNMBR}.zip" "$PRJPATH/"
 	echo 'Done.'
 }
 
@@ -442,7 +465,7 @@ function bom2pdf ()
 	-f "$pdfname" "$htmlname" 
 
 	rm -f "$htmlname"
-	cd "$workpath"
+	cd "$WORKPATH"
 	echo 'Done.'
 }
 
@@ -450,8 +473,9 @@ function bom2pdf ()
 ## Run the script
 ## =================================================================================================
 
-## Evaluate working paths and how help if needed
+## Get help if needed and evaluate working paths
 help "$ARG"
+setpaths "$ARG"
 
 ## Check for existing erp info or create new, if not existing
 ## Set global vars 'BRDNMBR' and 'PRJNMBR'
@@ -464,13 +488,13 @@ echo '  --------------------------------------------------'
 
 
 ## Create a new spec document from template or edit, if existing
-maketex PCB "$BRDNMBR"
+maketex PCB ""
 
 ## Create zip package for pcb manufacturer
-zippkg "$BRDNMBR" 'brd'
+zippkg PCB "$BRDNMBR"
 
 ## Copy this to released folder
-release "$PRJPATH" "${BRDNMBR}.zip"
+release "$WORKPATH" "${BRDNMBR}.zip"
 
 ## If there exists ERP project number, assuming that there is assembly data
 ## and thus, create assembly zip package as well
@@ -491,10 +515,10 @@ then
                 bom2pdf "$CURPRJNMBR$SEP$BOMDESC" "$BOMDOCEXT"
 
                 ## Create zip package for pcb manufacturing and assembly
-                zippkg "$CURPRJNMBR" 'prj'
+                zippkg ASM "$CURPRJNMBR"
 
                 ## Release manufacturing data
-                release "${PRJPATH}" "${CURPRJNMBR}.zip"
+                release "${WORKPATH}" "${CURPRJNMBR}.zip"
 
                 ## Release schematics
 		eval SCHPATH="$DEFSCHPATH"
