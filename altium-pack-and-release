@@ -66,6 +66,7 @@ PCBTEXTEMPLATE="pcb-spec-template"
 PCBVARTEMPLATE="pcb-spec-variables"
 ASMTEXTEMPLATE="assembly-spec-template"
 ASMVARTEMPLATE="assembly-spec-variables"
+TEXTMP=/tmp/textmp
 
 ## Name of the PCB specification file
 DEFPCBSPECFILE='"${BRDNMBR}${SEP}PCB${PDFEXT}"'
@@ -253,8 +254,8 @@ function maketex ()
 	local ASMRENDERINGS="${WORKPATH}/${ASMDOCPATH}/${CURPRJNMBR}${SEP}${ALTIUMASMEXT}"
 
         ## Create temporary dir with tex templates for pdf generation
-        local textmp="${PRJPATH}/textmp"
-        cp -r "${TEXTEMPLATEPATH}/." "$textmp/"
+	mkdir -p "$TEXTMP"
+        cp -r "${TEXTEMPLATEPATH}/." "$TEXTMP/"
 
 	## Set variables for current document
 	cd "$PRJPATH"
@@ -302,7 +303,7 @@ function maketex ()
 		echo Info: No spec variables found.
 		echo Creating new "$curvars" from template.
 		echo Edit the file and save your changes.
-		cp "${textmp}/${curtemplate}${TEXEXT}" "$curvars"
+		cp "${TEXTMP}/${curtemplate}${TEXEXT}" "$curvars"
 		chmod +w "$curvars"
 
 		## Save ERP numbers in spec file
@@ -319,31 +320,31 @@ function maketex ()
                 echo "$currenderings"
 		exit
         else
-                cp "$currenderings" "${textmp}/renderings.pdf"
+                cp "$currenderings" "${TEXTMP}/renderings.pdf"
         fi
 
         ## Run xelatex in temporary dir, move output pdf into project dir and delete temporary dir
-        cd "$textmp"
+        cd "$TEXTMP"
         echo
 	case $DOCTYPE in
 		PCB)
 			echo "Creating documentation ${PCBSPECFILE}..."
-			cp "${PRJPATH}/$PCBVARS" "${textmp}/variables${TEXEXT}"
+			cp "${PRJPATH}/$PCBVARS" "${TEXTMP}/variables${TEXEXT}"
 			xelatex -halt-on-error "${PCBTEXTEMPLATE}${TEXEXT}" >/dev/null
 			cp "${PCBTEXTEMPLATE}${PDFEXT}" "${PRJPATH}/${PCBSPECFILE}"
 			cp "${PCBTEXTEMPLATE}${PDFEXT}" "${WORKPATH}/${PCBSPECFILE}"
 			;;
 		ASM)
 			echo "Creating documentation ${ASMSPECFILE}..."
-			cp "${PRJPATH}/$PCBVARS" "${textmp}/variables${TEXEXT}"
-			cp "${PRJPATH}/$ASMVARS" "${textmp}/assemblynotes${TEXEXT}"
+			cp "${PRJPATH}/$PCBVARS" "${TEXTMP}/variables${TEXEXT}"
+			cp "${PRJPATH}/$ASMVARS" "${TEXTMP}/assemblynotes${TEXEXT}"
 			xelatex -halt-on-error "${ASMTEXTEMPLATE}${TEXEXT}" >/dev/null
 			cp "${ASMTEXTEMPLATE}${PDFEXT}" "${PRJPATH}/${ASMSPECFILE}"
 			cp "${ASMTEXTEMPLATE}${PDFEXT}" "${WORKPATH}/${ASMSPECFILE}"
 			;;
 	esac
         cd "$WORKPATH"
-        rm -rf "$textmp"
+        rm -rf "$TEXTMP"
         echo "Done."
 }
 
