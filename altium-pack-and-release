@@ -186,7 +186,7 @@ function erpinfo ()
 }
 
 
-## Copy a file into laytec released path
+## Release package as final or as prototype. Remove prototype, if final.
 ## -------------------------------------------------------------------------------------------------
 function release ()
 {
@@ -198,14 +198,29 @@ function release ()
                 echo 'Release '"${path}/${file}"'?'
                 local yn
                 local BETARELEASE=1
+		local BETAFILE="p${file}"
                 select yn in "Yes" "No";
                 do
                         case $yn in
                                 Yes)
-                                        cp "${path}/${file}" "$RELEASEDPATH"
                                         BETARELEASE=0
+                                        cp "${path}/${file}" "$RELEASEDPATH"
 					sed -i "s/RELEASEDREV\=.*/RELEASEDREV\=$REV/" "$ERPFILE"
                                         echo 'Done.'
+					if [ -e $RELEASEDPATH/$BETAFILE ]; then
+						echo
+						echo 'Remove prototype release?'
+						select yn in "Yes" "No";
+						do
+							case $yn in
+								Yes)
+									rm "${RELEASEDPATH}/${BETAFILE}"
+									break;;
+								No)
+									break;;
+							esac
+						done
+					fi
                                         break;;
                                 No)
                                         break;;
@@ -220,7 +235,7 @@ function release ()
                         do
                                 case $yn in
                                         Yes)
-                                                cp "${path}/${file}" "${RELEASEDPATH}/p${file}"
+                                                cp "${path}/${file}" "${RELEASEDPATH}/${BETAFILE}"
 						sed -i "s/RELEASEDREV\=.*/RELEASEDREV\=proto/" "$ERPFILE"
                                                 echo 'Done. '
                                                 break;;
