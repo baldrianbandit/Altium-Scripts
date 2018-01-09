@@ -34,7 +34,7 @@ do
 done
 
 ## Copy schematics, PCBs, ... that keep their names
-for i in 'PcbDoc' 'SchDoc' 'BomDoc' 'Harness' 'OutJob' 'Revision_History.txt'
+for i in 'PcbDoc' 'SchDoc' 'BomDoc' 'Harness' 'OutJob' 'txt'
 do
 	checkfile=$(ls "$LAST_PATH" | grep "$i")
 	if [ -n "$checkfile" ]
@@ -50,5 +50,8 @@ sed -i "/Name=Rev/,/Value=${LAST_DES}/{s//Name=Rev\r\nValue=${NEW_DES}/}" ./"${N
 
 ## Set write access to all files
 chmod -R +w "$NEW_PATH"
+
+## Clean up old outputs and history
+rm -rf "$LAST_PATH/Outputs" "$LAST_PATH/History"
 
 echo Done.

@@ -5,7 +5,7 @@
 ## Usage: Enter the Altium project's directory and run: pack-and-release <Revision>
 ## Suggested Altium output jobs: Laytec_Std_Unified.OutJob and Laytec_Std_Unified-NoRM.OutJob
 ## AF 22/02/2017
-VERSION=14-09-2017
+VERSION=09-01-2018
 
 ## Settings
 ## =================================================================================================
@@ -38,14 +38,15 @@ SPECDOCEXT=".tex"
 BOMDOCEXT=".xls"
 PPEXT=".txt"
 TEXEXT=".tex"
+HTMLEXT=".htm"
 
 ## File name seperator
 SEP="-"
 
 ## Define Altium output paths
 OUTPUTPATH="Outputs"
-BRDPATH="Fabrication"
-BRDDOCPATH="Fabrication/Docs"
+DEFPCBPATH='"Fabrication $BRDNMBR"'
+DEFPCBDOCPATH='"Fabrication $BRDNMBR/Docs"'
 DEFBOMPATH='"Assembly $CURPRJNMBR/BOM"'
 DEFPPPATH='"Assembly $CURPRJNMBR/Pick Place"'
 DEFASMDOCPATH='"Assembly $CURPRJNMBR/Docs"'
@@ -69,15 +70,15 @@ ASMVARTEMPLATE="assembly-spec-variables"
 TEXTMP=/tmp/textmp
 
 ## Name of the PCB specification file
-DEFPCBSPECFILE='"${BRDNMBR}${SEP}PCB${PDFEXT}"'
-DEFASMSPECFILE='"${CURPRJNMBR}${SEP}ASM${PDFEXT}"'
-DEFPCBVARSTEX='"${BRDNMBR}${SEP}${SPECDESC}${TEXEXT}"'
-DEFASMVARSTEX='"${CURPRJNMBR}${SEP}${SPECDESC}${TEXEXT}"'
+DEFPCBSPECFILE='"PCB${SEP}${BRDNMBR}${PDFEXT}"'
+DEFASMSPECFILE='"Assembly${SEP}${CURPRJNMBR}${PDFEXT}"'
+DEFPCBVARSTEX='"${SPECDESC}${SEP}${BRDNMBR}${TEXEXT}"'
+DEFASMVARSTEX='"${SPECDESC}${SEP}${CURPRJNMBR}${TEXEXT}"'
 
 ## List of files / folders containing the PCB manufacturing data
 ## Removed ODB and IPC since wine has XML export issues
-DEFBRDFILESLIST='"$BRDDOCPATH/$BRDNMBR$SEP$ALTIUMFABEXT":"$BRDPATH/Gerber":"$BRDPATH/GerberX2"\
-:"$BRDPATH/NC Drill":"$BRDPATH/ODB"'
+DEFPCBFILESLIST='"$PCBDOCPATH/$BRDNMBR$SEP$ALTIUMFABEXT":"$PCBPATH/Gerber":"$PCBPATH/GerberX2"\
+:"$PCBPATH/NC Drill":"$PCBPATH/ODB"'
 
 ## List of files / folders containing pick place and bom data
 DEFPRJFILESLIST='"$BOMPATH/$CURPRJNMBR$SEP$BOMDESC$BOMDOCEXT"\
@@ -265,7 +266,8 @@ function maketex ()
 	eval PCBVARS="$DEFPCBVARSTEX"
 	eval ASMVARS="$DEFASMVARSTEX"
 	eval ASMDOCPATH="$DEFASMDOCPATH"
-	local PCBRENDERINGS="${WORKPATH}/${BRDDOCPATH}/${BRDNMBR}${SEP}${ALTIUMFABEXT}"
+	eval PCBDOCPATH="$DEFPCBDOCPATH"
+	local PCBRENDERINGS="${WORKPATH}/${PCBDOCPATH}/${BRDNMBR}${SEP}${ALTIUMFABEXT}"
 	local ASMRENDERINGS="${WORKPATH}/${ASMDOCPATH}/${CURPRJNMBR}${SEP}${ALTIUMASMEXT}"
 
         ## Create temporary dir with tex templates for pdf generation
@@ -363,6 +365,25 @@ function maketex ()
         echo "Done."
 }
 
+## Clean up Altium outputs and working files
+## ------------------------------------------------------------------------------------------------
+function cleanup ()
+{
+	echo
+	echo "Clear working dir?"
+	local yn
+	select yn in "Yes" "No"
+	do
+		case "$yn" in
+			Yes)
+				cd "$PRJPATH"
+				rm -rf "$WORKPATH"
+				echo "Done."
+				break;;
+			No)     break;;
+		esac
+	done
+}
 
 ## Create zip archives of documentation, manufacturing data and pick and place as follows:
 ## 1) Create a zip package BRDNMBR with just the PCB manufacturing data
@@ -382,18 +403,23 @@ function zippkg ()
 	## These vars must be evaluated, because they depend on $BRDNMBR
 	local SPECFILE1
 	local SPECFILE2
-	local BRDFILESLIST
+	local PCBPATH
+	local PCBFILESLIST
 	local IGNORELIST
 	local ZIPNAME="${CURPRJNMBR}.zip"
+	eval PCBPATH="$DEFPCBPATH"
 	eval SPECFILE1="$DEFPCBSPECFILE"
 	eval SPECFILE2="$DEFASMSPECFILE"
-	eval BRDFILESLIST="$DEFBRDFILESLIST"
+	eval PCBFILESLIST="$DEFPCBFILESLIST"
 	eval IGNORELIST="$DEFIGNOREFILESLIST"
 
-	## First step: Create zip with contents in $BRDFILESLIST
+	## Write revision to text file
+	touch "./${REVNAME}${REV}"
+	
+	## First step: Create zip with contents in $PCBFILESLIST
 	IFS=$':'
 	local i
-	for i in $BRDFILESLIST $SPECFILE1
+	for i in $PCBFILESLIST $SPECFILE1 $REVNAME$REV
 	do
 		if [ ! -e "$i" ]
 		then
@@ -436,42 +462,39 @@ function zippkg ()
 }
 
 
-## Convert an excel document into a nice and readable pdf table using SOFFICE, in this case
-## soffice, and htmldoc
+## Convert an excel document into a nice and readable pdf table using htmldoc
 ## -------------------------------------------------------------------------------------------------
 function bom2pdf ()
 {
-        local docname="$1"
-        local docext="$2"
-        local htmlname="${docname}.html"
-        local pdfname="${docname}${PDFEXT}"
+        local DOCNAME="$1"
+        local DOCEXT="$2"
+        local HTMLNAME="${DOCNAME}${HTMLEXT}"
+        local PDFNAME="${DOCNAME}${PDFEXT}"
 	local BOMPATH=""
 	eval BOMPATH="$DEFBOMPATH"
 	cd "$BOMPATH"
 
-        if [ ! -e ${docname}${docext} ]
+        if [ ! -e ${DOCNAME}${DOCEXT} ]
         then
                 echo
-                echo 'Warning: No document' "${docname}${docext}" 'found.'
+                echo 'Warning: No document' "${DOCNAME}${DOCEXT}" 'found.'
                 exit
         fi
-        echo
-        echo 'Creating '"$pdfname"' from '"${docname}${docext}"'...'
-	## Convert office table to html
-	if [[ $(pgrep "$SOFFICE") > 0 ]]
-	then
-		echo
-		echo "Warning: $SOFFICE already running!"
-		echo
-	fi
-	"$SOFFICE" --calc --convert-to html "${docname}${docext}"\
-	>/dev/null 2>&1
-	## Convert html table to pdf
-	"$HTMLDOC" --quiet --webpage --textfont Arial --bodyfont Arial\
-	--fontsize 10 --size 297x210mm --left 10mm --top 10mm\
-	-f "$pdfname" "$htmlname" 
 
-	rm -f "$htmlname"
+	## Reformat Altiums html output
+	## Remove outer table, reset color, make fields wrappable, set title
+	sed -i "/<TABLE BORDER=1 CELLSPACING=0 CELLPADDING=1 BGCOLOR=#C0C0C0><TR><TD>/d" "$HTMLNAME"
+	sed -i "/<\/TD><\/TR><\/TABLE>/d" "$HTMLNAME"
+	sed -i "s/C0C0C0/FFFFFF/" "$HTMLNAME"
+	sed -i "/NOWRAP/{s/NOWRAP //}" "$HTMLNAME"
+	sed -i "s/MainGrid/Laytec 304029-201 Rev-${REV}/" "$HTMLNAME"
+
+	## Create pdf from html
+        echo
+        echo 'Creating '"$PDFNAME"' from '"${HTMLNAME}"'...'
+	$HTMLDOC --quiet --webpage --bodyfont Arial --headingfont Arial --continuous\
+	       	--fontsize 9 --size 297x210mm --left 10mm --right 10mm --top 10mm\
+		-f "$PDFNAME" "$HTMLNAME"
 	cd "$WORKPATH"
 	echo 'Done.'
 }
@@ -493,6 +516,12 @@ echo '  --------------------------------------------------'
 echo '   PCB Fabrication: '"$BRDNMBR"
 echo '  --------------------------------------------------'
 
+## Rename folder Fabrication to Fabrication $BRDNMBR, since Altium doesn't do it by default
+if [ -e $WORKPATH/Fabrication ]; then
+	eval PCBPATH=$DEFPCBPATH
+	rm -rf "${WORKPATH}/${PCBPATH}"
+	mv "${WORKPATH}/Fabrication" "${WORKPATH}/${PCBPATH}"
+fi
 
 ## Create a new spec document from template or edit, if existing
 maketex PCB ""
@@ -516,19 +545,16 @@ then
                 echo '  --------------------------------------------------'
 
 		## Create a new spec document from template or edit, if existing
-		maketex ASM "$CURPRJNMBR"
+		maketex ASM "${CURPRJNMBR}"
 
-                ## Create pdf from bom document
-                bom2pdf "$CURPRJNMBR$SEP$BOMDESC" "$BOMDOCEXT"
+                ## Create pdf from html bom document
+                bom2pdf "${CURPRJNMBR}${SEP$BOMDESC}-HTML" "${HTMLEXT}"
 
                 ## Create zip package for pcb manufacturing and assembly
-                zippkg ASM "$CURPRJNMBR"
+                zippkg ASM "${CURPRJNMBR}"
 
                 ## Release manufacturing data
                 release "${WORKPATH}" "${CURPRJNMBR}.zip"
-
-		## Clean up
-		rm -f "${CURPRJNMBR}.zip" "${CURPRJNMBR}${SEP}ASM${PDFEXT}"
 
                 ## Release schematics
 		eval SCHPATH="$DEFSCHPATH"
@@ -537,4 +563,5 @@ then
 fi
 
 ## Clean up
-rm -f "${BRDNMBR}.zip" "${BRDNMBR}${SEP}PCB${PDFEXT}"
+cleanup
+
