@@ -5,9 +5,19 @@ GITIGNORETEMPLATE=/ltfs/rnd/Software/Git/altium-gitignore-template
 
 if [ -e ./.git ]
 then
+	HERE=$PWD
 	REMOTE=$(git remote show)
+	REMOTEURL=$(git config --get remote.origin.url)
+	## Local commit
 	git add --all
 	git commit -m "Update $DATE"
+	## Commit remote changes
+	cd $REMOTEURL
+	git add --all
+	git commit -m "Update from R:\\"
+	## Pull remote commit and push local commit
+	cd $HERE
+	git pull
 	if [[ $REMOTE = "origin" ]]
 	then
 		git push

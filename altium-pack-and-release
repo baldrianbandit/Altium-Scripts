@@ -384,6 +384,7 @@ function zippkg ()
 	local SPECFILE2
 	local BRDFILESLIST
 	local IGNORELIST
+	local ZIPNAME="${CURPRJNMBR}.zip"
 	eval SPECFILE1="$DEFPCBSPECFILE"
 	eval SPECFILE2="$DEFASMSPECFILE"
 	eval BRDFILESLIST="$DEFBRDFILESLIST"
@@ -392,7 +393,7 @@ function zippkg ()
 	## First step: Create zip with contents in $BRDFILESLIST
 	IFS=$':'
 	local i
-	for i in $BRDFILESLIST
+	for i in $BRDFILESLIST $SPECFILE1
 	do
 		if [ ! -e "$i" ]
 		then
@@ -401,7 +402,7 @@ function zippkg ()
 			exit
 		fi
 		echo '  '"$i"
-		zip -q -x "$IGNORELIST" -r -u "$CURPRJNMBR" "$i"
+		zip -q -x "$IGNORELIST" -r -u "$ZIPNAME" "$i"
 	done
 
 	## Second step: Zip pick place data and bom
@@ -418,7 +419,7 @@ function zippkg ()
 			eval prjfileslist="$DEFPRJFILESLIST"
 			IFS=$':'
 			local i
-			for i in $prjfileslist
+			for i in $prjfileslist $SPECFILE2
 			do
 				if [ ! -e "$i" ]
 				then
@@ -427,20 +428,10 @@ function zippkg ()
 					exit
 				fi
 				echo '  '"$i"
-				zip -q -x "$IGNORELIST" -r -u "$CURPRJNMBR" "$i"
+				zip -q -x "$IGNORELIST" -r -u "$ZIPNAME" "$i"
 			done
-			## Add assembly spec document
-			zip -q -u "${CURPRJNMBR}.zip" "$SPECFILE2" 
-			echo '  '"$SPECFILE2"
 		;;
 	esac
-
-	## Add pcb spec document
-	zip -q -u "${CURPRJNMBR}.zip" "$SPECFILE1" 
-	echo '  '"$SPECFILE1"
-
-	## Move zip into project path and add specification pdf
-	#mv "${CURPRJNMBR}.zip" "$PRJPATH/"
 	echo 'Done.'
 }
 
@@ -536,8 +527,14 @@ then
                 ## Release manufacturing data
                 release "${WORKPATH}" "${CURPRJNMBR}.zip"
 
+		## Clean up
+		rm -f "${CURPRJNMBR}.zip" "${CURPRJNMBR}${SEP}ASM${PDFEXT}"
+
                 ## Release schematics
 		eval SCHPATH="$DEFSCHPATH"
                 release "${SCHPATH}" "${CURPRJNMBR}${SEP}${ALTIUMSCHEXT}"
         done
 fi
+
+## Clean up
+rm -f "${BRDNMBR}.zip" "${BRDNMBR}${SEP}PCB${PDFEXT}"

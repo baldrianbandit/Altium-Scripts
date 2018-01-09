@@ -34,7 +34,7 @@ do
 done
 
 ## Copy schematics, PCBs, ... that keep their names
-for i in 'PcbDoc' 'SchDoc' 'BomDoc' 'Harness' 'OutJob'
+for i in 'PcbDoc' 'SchDoc' 'BomDoc' 'Harness' 'OutJob' 'Revision_History.txt'
 do
 	checkfile=$(ls "$LAST_PATH" | grep "$i")
 	if [ -n "$checkfile" ]
