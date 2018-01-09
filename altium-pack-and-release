@@ -468,7 +468,7 @@ function bom2pdf ()
 {
         local DOCNAME="$1"
         local DOCEXT="$2"
-        local HTMLNAME="${DOCNAME}${HTMLEXT}"
+        local HTMLNAME="${DOCNAME}-HTML${HTMLEXT}"
         local PDFNAME="${DOCNAME}${PDFEXT}"
 	local BOMPATH=""
 	eval BOMPATH="$DEFBOMPATH"
@@ -548,7 +548,7 @@ then
 		maketex ASM "${CURPRJNMBR}"
 
                 ## Create pdf from html bom document
-                bom2pdf "${CURPRJNMBR}${SEP$BOMDESC}-HTML" "${HTMLEXT}"
+                bom2pdf "${CURPRJNMBR}${SEP}${BOMDESC}" "${BOMDOCEXT}"
 
                 ## Create zip package for pcb manufacturing and assembly
                 zippkg ASM "${CURPRJNMBR}"
