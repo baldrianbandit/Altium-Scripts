@@ -142,6 +142,9 @@ function setpaths ()
 	## Now since Revision $arg exists, generate global $REV and $WORKPATH
 	REV=$(sed "s/$REVNAME//" <<< $ARG)
 	eval WORKPATH="$DEFWORKPATH"
+	## Escape spaces in paths
+	PRJPATH=$(echo $PRJPATH | sed 's/ /\ /g')
+	WORKPATH=$(echo $WORKPATH | sed 's/ /\ /g')
 }
 
 ## Read the project's ERP number(s) or set them, if none
@@ -274,6 +277,9 @@ function maketex ()
 	mkdir -p "$TEXTMP"
         cp -r "${TEXTEMPLATEPATH}/." "$TEXTMP/"
 
+	## Put revision info into tex file
+	echo "\def \REV {$REV}" > "${TEXTMP}/revision.tex"
+
 	## Set variables for current document
 	cd "$PRJPATH"
 	case $DOCTYPE in
@@ -300,7 +306,8 @@ function maketex ()
                 select yn in "Yes" "No"
                 do
                         case "$yn" in
-                                Yes)	echo
+                                Yes)	
+					echo
                                         echo 'Edit '"$curvars"' and select Ready.'
                                         "$EDITOR" "$curvars"
                                         select dc in "Ready"; 
@@ -310,7 +317,8 @@ function maketex ()
                                               esac
                                         done
                                         break;;
-                                No)     break;;
+                                No)     
+					break;;
                         esac
                 done
 
@@ -328,7 +336,6 @@ function maketex ()
 		sleep 2
 		"$EDITOR" "$curvars"
         fi
-
         ## Copy Altium 3d prints into temporary dir
         if [ ! -e "$currenderings" ]
         then
@@ -347,7 +354,8 @@ function maketex ()
 		PCB)
 			echo "Creating documentation ${PCBSPECFILE}..."
 			cp "${PRJPATH}/$PCBVARS" "${TEXTMP}/variables${TEXEXT}"
-			xelatex -halt-on-error "${PCBTEXTEMPLATE}${TEXEXT}" >/dev/null
+			xelatex -halt-on-error "${PCBTEXTEMPLATE}${TEXEXT}" >"${TEXTMP}/xelatex.log"
+			if [[ $? -ne 0 ]]; then cat "${TEXTMP}/xelatex.log"; echo; echo "Latex error. Take a look at the log."; exit; fi
 			cp "${PCBTEXTEMPLATE}${PDFEXT}" "${PRJPATH}/${PCBSPECFILE}"
 			cp "${PCBTEXTEMPLATE}${PDFEXT}" "${WORKPATH}/${PCBSPECFILE}"
 			;;
@@ -355,7 +363,8 @@ function maketex ()
 			echo "Creating documentation ${ASMSPECFILE}..."
 			cp "${PRJPATH}/$PCBVARS" "${TEXTMP}/variables${TEXEXT}"
 			cp "${PRJPATH}/$ASMVARS" "${TEXTMP}/assemblynotes${TEXEXT}"
-			xelatex -halt-on-error "${ASMTEXTEMPLATE}${TEXEXT}" >/dev/null
+			xelatex -halt-on-error "${ASMTEXTEMPLATE}${TEXEXT}" >"${TEXTMP}/xelatex.log"
+			if [[ $? -ne 0 ]]; then cat "${TEXTMP}/xelatex.log"; echo; echo "Latex error. Take a look at the log."; exit; fi
 			cp "${ASMTEXTEMPLATE}${PDFEXT}" "${PRJPATH}/${ASMSPECFILE}"
 			cp "${ASMTEXTEMPLATE}${PDFEXT}" "${WORKPATH}/${ASMSPECFILE}"
 			;;
@@ -517,7 +526,7 @@ echo '   PCB Fabrication: '"$BRDNMBR"
 echo '  --------------------------------------------------'
 
 ## Rename folder Fabrication to Fabrication $BRDNMBR, since Altium doesn't do it by default
-if [ -e $WORKPATH/Fabrication ]; then
+if [ -e "$WORKPATH/Fabrication" ]; then
 	eval PCBPATH=$DEFPCBPATH
 	rm -rf "${WORKPATH}/${PCBPATH}"
 	mv "${WORKPATH}/Fabrication" "${WORKPATH}/${PCBPATH}"
