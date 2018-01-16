@@ -5,7 +5,7 @@
 ## Usage: Enter the Altium project's directory and run: pack-and-release <Revision>
 ## Suggested Altium output jobs: Laytec_Std_Unified.OutJob and Laytec_Std_Unified-NoRM.OutJob
 ## AF 22/02/2017
-VERSION=09-01-2018
+VERSION=16-01-2018
 
 ## Settings
 ## =================================================================================================
@@ -76,9 +76,8 @@ DEFPCBVARSTEX='"${SPECDESC}${SEP}${BRDNMBR}${TEXEXT}"'
 DEFASMVARSTEX='"${SPECDESC}${SEP}${CURPRJNMBR}${TEXEXT}"'
 
 ## List of files / folders containing the PCB manufacturing data
-## Removed ODB and IPC since wine has XML export issues
-DEFPCBFILESLIST='"$PCBDOCPATH/$BRDNMBR$SEP$ALTIUMFABEXT":"$PCBPATH/Gerber":"$PCBPATH/GerberX2"\
-:"$PCBPATH/NC Drill":"$PCBPATH/ODB"'
+DEFPCBFILESLIST='"$PCBDOCPATH/$BRDNMBR$SEP$ALTIUMFABEXT":"$PCBPATH/GerberX2"\
+:"$PCBPATH/ODB":"$PCBPATH/IPC2581"'
 
 ## List of files / folders containing pick place and bom data
 DEFPRJFILESLIST='"$BOMPATH/$CURPRJNMBR$SEP$BOMDESC$BOMDOCEXT"\
