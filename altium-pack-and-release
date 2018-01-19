@@ -1,4 +1,4 @@
-#!/bin/sh
+#!//usr/bin/sh
 ## This script packs Altium PCB manufacturing data, assembly data and docs into zip files according
 ## to Laytec's ERP numbers. Brderp is the number of the PCB itself, while PRJNMBR ist the number of
 ## the assembled PCB.
@@ -15,7 +15,7 @@ ARG="$1"
 
 ## Define working directorys
 PRJPATH="$(pwd)"
-DEFWORKPATH='"${PRJPATH}/${REVNAME}${REV}/${OUTPUTPATH}"'
+DEFWORKPATH='"${PRJPATH}/${REVPRE}${REV}/${OUTPUTPATH}"'
 
 ## File to read / store ERP info
 ERPFILE="${PRJPATH}/.erpinfo"
@@ -24,7 +24,7 @@ ERPFILE="${PRJPATH}/.erpinfo"
 RELEASEDPATH="/ltfs/bureau/Produkte/Dokumente/Technische Zeichnungen/RELEASED/"
 
 ## Define revision prefix
-REVNAME="rev-"
+REVPRE="rev-"
 
 ## Define other programs to use
 EDITOR=vim
@@ -76,7 +76,7 @@ DEFPCBVARSTEX='"${SPECDESC}${SEP}${BRDNMBR}${TEXEXT}"'
 DEFASMVARSTEX='"${SPECDESC}${SEP}${CURPRJNMBR}${TEXEXT}"'
 
 ## List of files / folders containing the PCB manufacturing data
-DEFPCBFILESLIST='"$PCBDOCPATH/$BRDNMBR$SEP$ALTIUMFABEXT":"$PCBPATH/GerberX2"\
+DEFPCBFILESLIST='"$PCBDOCPATH/$BRDNMBR$SEP$ALTIUMFABEXT":"$PCBPATH/Gerber":"$PCBPATH/GerberX2"\
 :"$PCBPATH/ODB":"$PCBPATH/IPC2581"'
 
 ## List of files / folders containing pick place and bom data
@@ -139,7 +139,7 @@ function setpaths ()
         fi
 
 	## Now since Revision $arg exists, generate global $REV and $WORKPATH
-	REV=$(sed "s/$REVNAME//" <<< $ARG)
+	REV=$(sed "s/$REVPRE//" <<< $ARG)
 	eval WORKPATH="$DEFWORKPATH"
 	## Escape spaces in paths
 	PRJPATH=$(echo $PRJPATH | sed 's/ /\ /g')
@@ -174,7 +174,7 @@ function erpinfo ()
 			echo "RELEASEDREV=none" >> "$ERPFILE"
 		fi
 		echo 'Currently released revision:'
-		echo "${REVNAME}${RELEASEDREV}"
+		echo "${REVPRE}${RELEASEDREV}"
         else
 		echo
 		echo 'Missing ERP information.'
@@ -193,60 +193,52 @@ function erpinfo ()
 ## -------------------------------------------------------------------------------------------------
 function release ()
 {
-        local path="$1"
-        local file="$2"
-        if [ -e "$path/$file" ]
+        local DIR="$1"
+        local NMBR="$2"
+	local FILEEXT="$3"
+	local PREVREV=$(echo $REV | tr 'b-z' 'a-y')
+	local FILE="${NMBR}${SEP}${REVPRE}${REV}${FILEEXT}"
+	local PREVFILE1="${NMBR}${SEP}${REVPRE}${PREVREV}${FILEEXT}" PREVFILE2="${NMBR}${FILEEXT}"
+	local BETAFILE1="p${FILE}" BETAFILE2="p${NMBR}${FILEEXT}"
+
+        if [ -e "$DIR/$FILE" ]
         then
                 echo
-                echo 'Release '"${path}/${file}"'?'
+                echo "Release ${DIR}/${FILE}?"
                 local yn
-                local BETARELEASE=1
-		local BETAFILE="p${file}"
-                select yn in "Yes" "No";
+                select yn in "Yes" "No" "Prototype";
                 do
                         case $yn in
                                 Yes)
-                                        BETARELEASE=0
-                                        cp "${path}/${file}" "$RELEASEDPATH"
+                                        cp "${DIR}/${FILE}" "$RELEASEDPATH"
 					sed -i "s/RELEASEDREV\=.*/RELEASEDREV\=$REV/" "$ERPFILE"
                                         echo 'Done.'
-					if [ -e $RELEASEDPATH/$BETAFILE ]; then
-						echo
-						echo 'Remove prototype release?'
-						select yn in "Yes" "No";
-						do
-							case $yn in
-								Yes)
-									rm "${RELEASEDPATH}/${BETAFILE}"
-									break;;
-								No)
-									break;;
-							esac
-						done
-					fi
+					for ITEM in $BETAFILE1 $BETAFILE2 $PREVFILE1 $PREVFILE2; do
+						if [ -e $RELEASEDPATH/$ITEM ]; then
+							echo
+							echo "Remove previous release ${ITEM}?"
+							select yn in "Yes" "No";
+							do
+								case $yn in
+									Yes)
+										rm "${RELEASEDPATH}/${ITEM}"
+										break;;
+									No)
+										break;;
+								esac
+							done
+						fi
+					done
                                         break;;
                                 No)
                                         break;;
+				Prototype)
+					cp "${DIR}/${FILE}" "${RELEASEDPATH}/${BETAFILE}"
+					sed -i "s/RELEASEDREV\=.*/RELEASEDREV\=proto/" "$ERPFILE"
+					echo 'Done. '
+					break;;
                         esac
                 done
-                
-                if [ "$BETARELEASE" -eq 1 ]
-                then
-                        echo
-                        echo "Release as prototype?"
-                        select yn in "Yes" "No";
-                        do
-                                case $yn in
-                                        Yes)
-                                                cp "${path}/${file}" "${RELEASEDPATH}/${BETAFILE}"
-						sed -i "s/RELEASEDREV\=.*/RELEASEDREV\=proto/" "$ERPFILE"
-                                                echo 'Done. '
-                                                break;;
-                                        No)
-                                                break;;
-                                esac
-                        done
-                fi
         fi
 }
 
@@ -414,20 +406,17 @@ function zippkg ()
 	local PCBPATH
 	local PCBFILESLIST
 	local IGNORELIST
-	local ZIPNAME="${CURPRJNMBR}.zip"
+	local ZIPNAME="${CURPRJNMBR}${SEP}${REVPRE}${REV}.zip"
 	eval PCBPATH="$DEFPCBPATH"
 	eval SPECFILE1="$DEFPCBSPECFILE"
 	eval SPECFILE2="$DEFASMSPECFILE"
 	eval PCBFILESLIST="$DEFPCBFILESLIST"
 	eval IGNORELIST="$DEFIGNOREFILESLIST"
 
-	## Write revision to text file
-	touch "./${REVNAME}${REV}"
-	
 	## First step: Create zip with contents in $PCBFILESLIST
 	IFS=$':'
 	local i
-	for i in $PCBFILESLIST $SPECFILE1 $REVNAME$REV
+	for i in $PCBFILESLIST $SPECFILE1
 	do
 		if [ ! -e "$i" ]
 		then
@@ -474,20 +463,21 @@ function zippkg ()
 ## -------------------------------------------------------------------------------------------------
 function bom2pdf ()
 {
-        local DOCNAME="$1"
-        local DOCEXT="$2"
-        local HTMLNAME="${DOCNAME}-HTML${HTMLEXT}"
-        local PDFNAME="${DOCNAME}${PDFEXT}"
+	local CURPRJNMBR="$1"
+        local DOCNAME="${CURPRJNMBR}${SEP}${BOMDESC}${BOMDOCEXT}"
+        local HTMLNAME="${CURPRJNMBR}${SEP}${BOMDESC}${SEP}HTML${HTMLEXT}"
+        local PDFNAME="${CURPRJNMBR}${SEP}${BOMDESC}${PDFEXT}"
 	local BOMPATH=""
 	eval BOMPATH="$DEFBOMPATH"
 	cd "$BOMPATH"
 
-        if [ ! -e ${DOCNAME}${DOCEXT} ]
-        then
-                echo
-                echo 'Warning: No document' "${DOCNAME}${DOCEXT}" 'found.'
-                exit
-        fi
+	for name in $DOCNAME $HTMLNAME; do
+		if [ ! -e $name ]; then
+			echo
+			echo "Warning: No document ${name} found."
+			exit
+		fi
+	done
 
 	## Reformat Altiums html output
 	## Remove outer table, reset color, make fields wrappable, set title
@@ -495,7 +485,7 @@ function bom2pdf ()
 	sed -i "/<\/TD><\/TR><\/TABLE>/d" "$HTMLNAME"
 	sed -i "s/C0C0C0/FFFFFF/" "$HTMLNAME"
 	sed -i "/NOWRAP/{s/NOWRAP //}" "$HTMLNAME"
-	sed -i "s/MainGrid/Laytec 304029-201 Rev-${REV}/" "$HTMLNAME"
+	sed -i "s/MainGrid/Laytec ${CURPRJNMBR} Rev-${REV}/" "$HTMLNAME"
 
 	## Create pdf from html
         echo
@@ -538,7 +528,7 @@ maketex PCB ""
 zippkg PCB "$BRDNMBR"
 
 ## Copy this to released folder
-release "$WORKPATH" "${BRDNMBR}.zip"
+release "$WORKPATH" "${BRDNMBR}" ".zip"
 
 ## If there exists ERP project number, assuming that there is assembly data
 ## and thus, create assembly zip package as well
@@ -556,17 +546,17 @@ then
 		maketex ASM "${CURPRJNMBR}"
 
                 ## Create pdf from html bom document
-                bom2pdf "${CURPRJNMBR}${SEP}${BOMDESC}" "${BOMDOCEXT}"
+                bom2pdf "${CURPRJNMBR}"
 
                 ## Create zip package for pcb manufacturing and assembly
                 zippkg ASM "${CURPRJNMBR}"
 
                 ## Release manufacturing data
-                release "${WORKPATH}" "${CURPRJNMBR}.zip"
+                release "${WORKPATH}" "${CURPRJNMBR}" ".zip"
 
                 ## Release schematics
 		eval SCHPATH="$DEFSCHPATH"
-                release "${SCHPATH}" "${CURPRJNMBR}${SEP}${ALTIUMSCHEXT}"
+                release "${SCHPATH}" "${CURPRJNMBR}" "${ALTIUMSCHEXT}"
         done
 fi
 
