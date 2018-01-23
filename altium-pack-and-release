@@ -206,7 +206,7 @@ function release ()
                 echo
                 echo "Release ${DIR}/${FILE}?"
                 local yn
-                select yn in "Yes" "No" "Prototype";
+                select yn in "Yes" "Skip" "Prototype";
                 do
                         case $yn in
                                 Yes)
@@ -230,7 +230,7 @@ function release ()
 						fi
 					done
                                         break;;
-                                No)
+                                Skip)
                                         break;;
 				Prototype)
 					cp "${DIR}/${FILE}" "${RELEASEDPATH}/${BETAFILE}"
@@ -395,12 +395,8 @@ function zippkg ()
         local CURPRJNMBR="$2"	## Current ERP number
 	cd "$WORKPATH"
 
-	## Zip fabrication data and doc
-	echo
-	echo 'Creating fabrication package '"$CURPRJNMBR"'.zip including...' 
-
 	## Generate lists of files to zip
-	## These vars must be evaluated, because they depend on $BRDNMBR
+	## These vars must be evaluated, because they depend on $2
 	local SPECFILE1
 	local SPECFILE2
 	local PCBPATH
@@ -412,6 +408,10 @@ function zippkg ()
 	eval SPECFILE2="$DEFASMSPECFILE"
 	eval PCBFILESLIST="$DEFPCBFILESLIST"
 	eval IGNORELIST="$DEFIGNOREFILESLIST"
+
+	## Zip fabrication data and doc
+	echo
+	echo "Creating fabrication package ${ZIPNAME} including..." 
 
 	## First step: Create zip with contents in $PCBFILESLIST
 	IFS=$':'
@@ -510,13 +510,13 @@ setpaths "$ARG"
 erpinfo
 
 echo
-echo '  --------------------------------------------------'
-echo '   PCB Fabrication: '"$BRDNMBR"
-echo '  --------------------------------------------------'
+echo "  --------------------------------------------------"
+echo "   PCB Fabrication: ${BRDNMBR}${SEP}${REVPRE}${REV}"
+echo "  --------------------------------------------------"
 
 ## Rename folder Fabrication to Fabrication $BRDNMBR, since Altium doesn't do it by default
-if [ -e "$WORKPATH/Fabrication" ]; then
-	eval PCBPATH=$DEFPCBPATH
+if [ -d "$WORKPATH/Fabrication" ]; then
+	eval PCBPATH="${DEFPCBPATH}"
 	rm -rf "${WORKPATH}/${PCBPATH}"
 	mv "${WORKPATH}/Fabrication" "${WORKPATH}/${PCBPATH}"
 fi
@@ -538,9 +538,9 @@ then
         for CURPRJNMBR in $PRJNMBR
         do
                 echo
-                echo '  --------------------------------------------------'
-                echo '   PCB Assembly: '"$CURPRJNMBR"
-                echo '  --------------------------------------------------'
+                echo "  --------------------------------------------------"
+                echo "   PCB Assembly: ${CURPRJNMBR}${SEP}${REVPRE}${REV}"
+                echo "  --------------------------------------------------"
 
 		## Create a new spec document from template or edit, if existing
 		maketex ASM "${CURPRJNMBR}"
