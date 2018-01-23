@@ -1,5 +1,5 @@
 #!/bin/sh
-## Create new revision from existing revision or existing working folder
+## Create new revision from existing revision 
 ## Usage: Run mk-snapshot from within project folder
 
 ## Variables
@@ -44,8 +44,6 @@ do
 done
 
 ## Edit Rev parameter of new project file
-## Line1: if creating from 'working', line2: if creating from 'rev-x'
-sed -i "/Name=Rev/,/Value=working/{s//Name=Rev\r\nValue=${NEW_DES}/}" ./"${NEW_PATH}/${PRJNAME}-${NEW_DES}.PrjPcb"
 sed -i "/Name=Rev/,/Value=${LAST_DES}/{s//Name=Rev\r\nValue=${NEW_DES}/}" ./"${NEW_PATH}/${PRJNAME}-${NEW_DES}.PrjPcb"
 
 ## Set write access to all files
