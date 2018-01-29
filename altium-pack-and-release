@@ -556,7 +556,7 @@ then
 
                 ## Release schematics
 		eval SCHPATH="$DEFSCHPATH"
-                release "${SCHPATH}" "${CURPRJNMBR}" "${ALTIUMSCHEXT}"
+                release "${SCHPATH}" "${CURPRJNMBR}" "${SEP}${ALTIUMSCHEXT}"
         done
 fi
 
