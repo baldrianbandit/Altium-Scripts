@@ -77,7 +77,7 @@ DEFASMVARSTEX='"${SPECDESC}${SEP}${CURPRJNMBR}${TEXEXT}"'
 
 ## List of files / folders containing the PCB manufacturing data
 DEFPCBFILESLIST='"$PCBDOCPATH/$BRDNMBR$SEP$ALTIUMFABEXT":"$PCBPATH/Gerber":"$PCBPATH/GerberX2"\
-:"$PCBPATH/ODB":"$PCBPATH/IPC2581"'
+:"$PCBPATH/ODB"
 
 ## List of files / folders containing pick place and bom data
 DEFPRJFILESLIST='"$BOMPATH/$CURPRJNMBR$SEP$BOMDESC$BOMDOCEXT"\
