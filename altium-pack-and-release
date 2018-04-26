@@ -76,8 +76,8 @@ DEFPCBVARSTEX='"${SPECDESC}${SEP}${BRDNMBR}${TEXEXT}"'
 DEFASMVARSTEX='"${SPECDESC}${SEP}${CURPRJNMBR}${TEXEXT}"'
 
 ## List of files / folders containing the PCB manufacturing data
-DEFPCBFILESLIST='"$PCBDOCPATH/$BRDNMBR$SEP$ALTIUMFABEXT":"$PCBPATH/Gerber":"$PCBPATH/GerberX2"\
-:"$PCBPATH/ODB"'
+DEFPCBFILESLIST='"$PCBDOCPATH/$BRDNMBR$SEP$ALTIUMFABEXT":"$PCBPATH/GerberX2"\
+:"$PCBPATH/ODB":"$PCBPATH/NC Drill"'
 
 ## List of files / folders containing pick place and bom data
 DEFPRJFILESLIST='"$BOMPATH/$CURPRJNMBR$SEP$BOMDESC$BOMDOCEXT"\
@@ -497,6 +497,25 @@ function bom2pdf ()
 	echo 'Done.'
 }
 
+## Compare the number of layers in Gerber output with documentation
+function check_gerber ()
+{
+	eval PCBPATH="${DEFPCBPATH}"
+	eval PCBVARS="$DEFPCBVARSTEX"
+	GERBPATH="GerberX2"
+	FABRPATH="${WORKPATH}/${PCBPATH}"
+	LAYERS=$(ls "${FABRPATH}/${GERBPATH}" | grep Copper | wc -l)
+	echo
+	echo "Checking on layers..."
+	grep -q "\\PCBLAYERS {$LAYERS}" "${PRJPATH}/${PCBVARS}"
+	if [[ $? -eq 0 ]]; then
+		echo "Found $LAYERS layers in Gerber output and documentation."
+	else
+		echo "Error: Number of layers in Gerber output ($LAYERS) differs from documentation."
+		exit
+	fi
+}
+
 
 ## Run the script
 ## =================================================================================================
@@ -523,6 +542,8 @@ fi
 
 ## Create a new spec document from template or edit, if existing
 maketex PCB ""
+
+check_gerber 
 
 ## Create zip package for pcb manufacturer
 zippkg PCB "$BRDNMBR"

@@ -1,0 +1,3 @@
+#!/bin/sh
+PREFIX=/home/freudenberg/wine/altium/current
+env WINEARCH=win32 WINEPREFIX="$PREFIX" /usr/bin/winecfg

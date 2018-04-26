@@ -1,0 +1,2 @@
+#!/bin/sh
+xfreerdp /v:ishikawa.laytec.lan /u:freudenberg /p:blumen -wallpaper -grab-keyboard /w:2560 /h:1400
