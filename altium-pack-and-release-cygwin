@@ -1,0 +1,586 @@
+#!/usr/bin/sh
+## This script packs Altium PCB manufacturing data, assembly data and docs into zip files according
+## to Laytec's ERP numbers. Brderp is the number of the PCB itself, while PRJNMBR ist the number of
+## the assembled PCB.
+## Usage: Enter the Altium project's directory and run: pack-and-release <Revision>
+## Suggested Altium output jobs: Laytec_Std_Unified.OutJob and Laytec_Std_Unified-NoRM.OutJob
+## AF 22/02/2017
+VERSION=16-01-2018
+
+## Settings
+## =================================================================================================
+
+## Capture first argument
+ARG="$1"
+
+## Define working directorys
+PRJPATH="$(pwd)"
+DEFWORKPATH='"${PRJPATH}/${REVPRE}${REV}/${OUTPUTPATH}"'
+
+## File to read / store ERP info
+ERPFILE="${PRJPATH}/.erpinfo"
+
+## Define Laytec release path
+RELEASEDPATH="/ltfs/bureau/Produkte/Dokumente/Technische Zeichnungen/RELEASED/"
+
+## Define revision prefix
+REVPRE="rev-"
+
+## Define other programs to use
+EDITOR=vim
+SOFFICE=soffice
+HTMLDOC=htmldoc
+
+## Define file extensions
+ALTIUMPDFEXT=".PDF"
+PDFEXT=".pdf"
+SPECDOCEXT=".tex"
+BOMDOCEXT=".xls"
+PPEXT=".txt"
+TEXEXT=".tex"
+HTMLEXT=".htm"
+
+## File name seperator
+SEP="-"
+
+## Define Altium output paths
+OUTPUTPATH="Outputs"
+DEFPCBPATH='"Fabrication $BRDNMBR"'
+DEFPCBDOCPATH='"Fabrication $BRDNMBR/Docs"'
+DEFBOMPATH='"Assembly $CURPRJNMBR/BOM"'
+DEFPPPATH='"Assembly $CURPRJNMBR/Pick Place"'
+DEFASMDOCPATH='"Assembly $CURPRJNMBR/Docs"'
+DEFSCHPATH='"Assembly $CURPRJNMBR/Schematics"'
+
+## Define Altium file naming 
+SPECDESC="Spec"
+BOMDESC="BOM"
+ALTIUMSCHEXT="Schematics${ALTIUMPDFEXT}"
+ALTIUMASMEXT="Assembly${ALTIUMPDFEXT}"
+ALTIUMFABEXT="Drawings${ALTIUMPDFEXT}"
+TOPRENDER="Rendering-Top${ALTIUMPDFEXT}"
+BOTRENDER="Rendering-Bottom${ALTIUMPDFEXT}"
+
+## Define Tex paths
+TEXTEMPLATEPATH="/cygdrive/r/Software/Tex/pcb-spec-template"
+PCBTEXTEMPLATE="pcb-spec-template"
+PCBVARTEMPLATE="pcb-spec-variables"
+ASMTEXTEMPLATE="assembly-spec-template"
+ASMVARTEMPLATE="assembly-spec-variables"
+TEXTMP=/tmp/textmp
+
+## Name of the PCB specification file
+DEFPCBSPECFILE='"PCB${SEP}${BRDNMBR}${PDFEXT}"'
+DEFASMSPECFILE='"Assembly${SEP}${CURPRJNMBR}${PDFEXT}"'
+DEFPCBVARSTEX='"${SPECDESC}${SEP}${BRDNMBR}${TEXEXT}"'
+DEFASMVARSTEX='"${SPECDESC}${SEP}${CURPRJNMBR}${TEXEXT}"'
+
+## List of files / folders containing the PCB manufacturing data
+DEFPCBFILESLIST='"$PCBDOCPATH/$BRDNMBR$SEP$ALTIUMFABEXT":"$PCBPATH/GerberX2"\
+:"$PCBPATH/ODB":"$PCBPATH/NC Drill"'
+
+## List of files / folders containing pick place and bom data
+DEFPRJFILESLIST='"$BOMPATH/$CURPRJNMBR$SEP$BOMDESC$BOMDOCEXT"\
+:"$BOMPATH/$CURPRJNMBR$SEP$BOMDESC$PDFEXT":"$PPPATH/$CURPRJNMBR$PPEXT"\
+:"$ASMDOCPATH/$CURPRJNMBR$SEP$ALTIUMASMEXT"'
+
+## List of files that we do not want to get zipped
+DEFIGNOREFILESLIST='"*.OutputStatus":"Status Report.*":"*Renderings*"' 
+
+
+## Functions declaration
+## =================================================================================================
+
+## Help
+function help ()
+{
+	local ARG="$1"
+        case "$ARG" in
+                --help|-h)
+                        echo Laytec pack-and-release script for Altium\'s PCB manufacturing\
+                                and assembly data.
+                        echo Usage:
+                        echo '        'cd '<project directory>'
+                        echo '        'pack-and-release '<revision>'
+                        echo
+                        echo It is highly recommende to use one of the following Altium output jobs\
+                                for data generation:
+                        echo '        * Laytec_Std_Unified.Outjob'
+                        echo '        * Laytec_Std_Unified-NoRM.Outjob'
+                        echo
+                        exit
+                        ;;
+                --version|-v)
+                        echo This is pack-and-release, version "$VERSION".
+                        echo
+                        exit
+                        ;;
+                "")     
+                        echo Run pack-and-release --help for info.
+                        echo
+                        exit
+                        ;;
+                *)
+        esac
+}
+
+## Set global prject path $PRJPATH and working path $WORKPATH
+## PRJPATH is the parent project folder, in which the revisions rev-a ... rev-z are to be find, e.g. 123456-NewCard
+## WORKPATH is the output folder, to which Altium outputs the fabrication data, e.g. $PRJPATH/rev-a/Outputs
+function setpaths ()
+{
+	local ARG="$1"
+        ## Check if revision exists
+        if [ ! -e ${PRJPATH}/${ARG} ]
+        then
+                echo Error: Revision "$ARG" not found. Exiting.
+                echo
+                exit
+        fi
+
+	## Now since Revision $arg exists, generate global $REV and $WORKPATH
+	REV=$(sed "s/$REVPRE//" <<< $ARG)
+	eval WORKPATH="$DEFWORKPATH"
+	## Escape spaces in paths
+	PRJPATH=$(echo $PRJPATH | sed 's/ /\ /g')
+	WORKPATH=$(echo $WORKPATH | sed 's/ /\ /g')
+}
+
+## Read the project's ERP number(s) or set them, if none
+## Brdnmbr is the number of the PCB itself, while PRJNMBR is the number of the 
+## assembled PCB
+## -------------------------------------------------------------------------------------------------
+function erpinfo ()
+{
+        if [ -e "$ERPFILE" ]
+        then
+                source "$ERPFILE"
+        fi
+
+        if [ ! -z "$PRJNMBR" ] && [ ! -z "$BRDNMBR" ]
+        then
+		echo
+                echo 'PCB ERP number found:'
+		echo "$BRDNMBR"
+		echo
+                echo 'Assembly ERP numbers found:'
+		local i; IFS=$' '
+		for i in $PRJNMBR; do
+			echo $i
+		done
+		echo
+		if [ -z $RELEASEDREV ]
+		then
+			echo "RELEASEDREV=none" >> "$ERPFILE"
+		fi
+		echo 'Currently released revision:'
+		echo "${REVPRE}${RELEASEDREV}"
+        else
+		echo
+		echo 'Missing ERP information.'
+                echo 'Enter board number: '
+                read BRDNMBR
+                echo 'Enter assembly number(s) seperated by spaces: '
+                read PRJNMBR
+                echo "BRDNMBR=$BRDNMBR" > "$ERPFILE"
+                echo "PRJNMBR=\"$PRJNMBR\"" >> "$ERPFILE"
+		echo "RELEASEDREV=none" >> "$ERPFILE"
+        fi
+}
+
+
+## Release package as final or as prototype. Remove prototype, if final.
+## -------------------------------------------------------------------------------------------------
+function release ()
+{
+        local DIR="$1"
+        local NMBR="$2"
+	local FILEEXT="$3"
+	local PREVREV=$(echo $REV | tr 'b-z' 'a-y')
+	local FILE="${NMBR}${SEP}${REVPRE}${REV}${FILEEXT}"
+	local PREVFILE1="${NMBR}${SEP}${REVPRE}${PREVREV}${FILEEXT}" PREVFILE2="${NMBR}${FILEEXT}"
+	local BETAFILE1="p${FILE}" BETAFILE2="p${NMBR}${FILEEXT}"
+
+        if [ -e "$DIR/$FILE" ]
+        then
+                echo
+                echo "Release ${DIR}/${FILE}?"
+                local yn
+                select yn in "Yes" "Skip" "Prototype";
+                do
+                        case $yn in
+                                Yes)
+                                        cp "${DIR}/${FILE}" "$RELEASEDPATH"
+					sed -i "s/RELEASEDREV\=.*/RELEASEDREV\=$REV/" "$ERPFILE"
+                                        echo 'Done.'
+					for ITEM in $BETAFILE1 $BETAFILE2 $PREVFILE1 $PREVFILE2; do
+						if [ -e $RELEASEDPATH/$ITEM ]; then
+							echo
+							echo "Remove previous release ${ITEM}?"
+							select yn in "Yes" "No";
+							do
+								case $yn in
+									Yes)
+										rm "${RELEASEDPATH}/${ITEM}"
+										break;;
+									No)
+										break;;
+								esac
+							done
+						fi
+					done
+                                        break;;
+                                Skip)
+                                        break;;
+				Prototype)
+					cp "${DIR}/${FILE}" "${RELEASEDPATH}/${BETAFILE1}"
+					sed -i "s/RELEASEDREV\=.*/RELEASEDREV\=proto/" "$ERPFILE"
+					echo "Released as ${BETAFILE1}."
+					break;;
+                        esac
+                done
+        fi
+}
+
+
+## Create a tex documentation
+## Arg1: project path; arg2: ERP_PCB; arg3: document description; arg4: file extension
+## Example: maketex "../../" "123456-000" "spec" "tex"
+## -------------------------------------------------------------------------------------------------
+function maketex ()
+{
+	local DOCTYPE=$1
+	local CURPRJNMBR=$2
+	local PCBSPECFILE
+	local ASMSPECFILE
+	local PCBVARS
+	local ASMVARS
+	eval PCBSPECFILE="$DEFPCBSPECFILE"
+	eval ASMSPECFILE="$DEFASMSPECFILE"
+	eval PCBVARS="$DEFPCBVARSTEX"
+	eval ASMVARS="$DEFASMVARSTEX"
+	eval ASMDOCPATH="$DEFASMDOCPATH"
+	eval PCBDOCPATH="$DEFPCBDOCPATH"
+	local PCBRENDERINGS="${WORKPATH}/${PCBDOCPATH}/${BRDNMBR}${SEP}${ALTIUMFABEXT}"
+	local ASMRENDERINGS="${WORKPATH}/${ASMDOCPATH}/${CURPRJNMBR}${SEP}${ALTIUMASMEXT}"
+
+        ## Create temporary dir with tex templates for pdf generation
+	mkdir -p "$TEXTMP"
+        cp -r "${TEXTEMPLATEPATH}/." "$TEXTMP/"
+
+	## Put revision info into tex file
+	echo "\def \REV {$REV}" > "${TEXTMP}/revision.tex"
+
+	## Set variables for current document
+	cd "$PRJPATH"
+	case $DOCTYPE in
+		PCB)
+			local curvars=$PCBVARS
+			local curtemplate=${PCBVARTEMPLATE}
+			local currenderings=$PCBRENDERINGS
+			local curnmbr=$BRDNMBR
+			;;
+		ASM)
+			local curvars=$ASMVARS
+			local curtemplate=${ASMVARTEMPLATE}
+			local currenderings=$ASMRENDERINGS
+			local curnmbr=$CURPRJNMBR
+			;;
+	esac
+
+        ## Check for existing spec document
+        if [ -e $curvars ]
+        then
+                echo
+                echo Existing document found: "$curvars". Edit?
+                local yn
+                select yn in "Yes" "No"
+                do
+                        case "$yn" in
+                                Yes)	
+					echo
+                                        echo 'Edit '"$curvars"' and select Ready.'
+                                        "$EDITOR" "$curvars"
+                                        select dc in "Ready"; 
+                                        do
+                                              case "$dc" in
+                                                        Ready)  break;;
+                                              esac
+                                        done
+                                        break;;
+                                No)     
+					break;;
+                        esac
+                done
+
+        ## Or create spec document from template
+        else
+		echo
+		echo Info: No spec variables found.
+		echo Creating new "$curvars" from template.
+		echo Edit the file and save your changes.
+		cp "${TEXTMP}/${curtemplate}${TEXEXT}" "$curvars"
+		chmod +w "$curvars"
+
+		## Save ERP numbers in spec file
+		sed -i "s/000000-000/${curnmbr}/" "${PRJPATH}/${curvars}" 
+		sleep 2
+		"$EDITOR" "$curvars"
+        fi
+        ## Copy Altium 3d prints into temporary dir
+        if [ ! -e "$currenderings" ]
+        then
+                echo
+                echo Error: Missing 3d prints:
+                echo "$currenderings"
+		exit
+        else
+                cp "$currenderings" "${TEXTMP}/renderings.pdf"
+        fi
+
+        ## Run xelatex in temporary dir, move output pdf into project dir and delete temporary dir
+        cd "$TEXTMP"
+        echo
+	case $DOCTYPE in
+		PCB)
+			echo "Creating documentation ${PCBSPECFILE}..."
+			cp "${PRJPATH}/$PCBVARS" "${TEXTMP}/variables${TEXEXT}"
+			xelatex -halt-on-error "${PCBTEXTEMPLATE}${TEXEXT}" >"${TEXTMP}/xelatex.log"
+			if [[ $? -ne 0 ]]; then cat "${TEXTMP}/xelatex.log"; echo; echo "Latex error. Take a look at the log."; exit; fi
+			cp "${PCBTEXTEMPLATE}${PDFEXT}" "${PRJPATH}/${PCBSPECFILE}"
+			cp "${PCBTEXTEMPLATE}${PDFEXT}" "${WORKPATH}/${PCBSPECFILE}"
+			;;
+		ASM)
+			echo "Creating documentation ${ASMSPECFILE}..."
+			cp "${PRJPATH}/$PCBVARS" "${TEXTMP}/variables${TEXEXT}"
+			cp "${PRJPATH}/$ASMVARS" "${TEXTMP}/assemblynotes${TEXEXT}"
+			xelatex -halt-on-error "${ASMTEXTEMPLATE}${TEXEXT}" >"${TEXTMP}/xelatex.log"
+			if [[ $? -ne 0 ]]; then cat "${TEXTMP}/xelatex.log"; echo; echo "Latex error. Take a look at the log."; exit; fi
+			cp "${ASMTEXTEMPLATE}${PDFEXT}" "${PRJPATH}/${ASMSPECFILE}"
+			cp "${ASMTEXTEMPLATE}${PDFEXT}" "${WORKPATH}/${ASMSPECFILE}"
+			;;
+	esac
+        cd "$WORKPATH"
+        rm -rf "$TEXTMP"
+        echo "Done."
+}
+
+## Clean up Altium outputs and working files
+## ------------------------------------------------------------------------------------------------
+function cleanup ()
+{
+	echo
+	echo "Clear working dir?"
+	local yn
+	select yn in "Yes" "No"
+	do
+		case "$yn" in
+			Yes)
+				cd "$PRJPATH"
+				rm -rf "$WORKPATH"
+				echo "Done."
+				break;;
+			No)     break;;
+		esac
+	done
+}
+
+## Create zip archives of documentation, manufacturing data and pick and place as follows:
+## 1) Create a zip package BRDNMBR with just the PCB manufacturing data
+## 2) Create a zip package PRJNMBR with both PCB manufacturing data and assembly data, if available
+## -------------------------------------------------------------------------------------------------
+function zippkg ()
+{
+        local FUNC="$1" ## Whether to store fabrication data or assembly, too
+        local CURPRJNMBR="$2"	## Current ERP number
+	cd "$WORKPATH"
+
+	## Generate lists of files to zip
+	## These vars must be evaluated, because they depend on $2
+	local SPECFILE1
+	local SPECFILE2
+	local PCBPATH
+	local PCBFILESLIST
+	local IGNORELIST
+	local ZIPNAME="${CURPRJNMBR}${SEP}${REVPRE}${REV}.zip"
+	eval PCBPATH="$DEFPCBPATH"
+	eval SPECFILE1="$DEFPCBSPECFILE"
+	eval SPECFILE2="$DEFASMSPECFILE"
+	eval PCBFILESLIST="$DEFPCBFILESLIST"
+	eval IGNORELIST="$DEFIGNOREFILESLIST"
+
+	## Zip fabrication data and doc
+	echo
+	echo "Creating fabrication package ${ZIPNAME} including..." 
+
+	## First step: Create zip with contents in $PCBFILESLIST
+	IFS=$':'
+	local i
+	for i in $PCBFILESLIST $SPECFILE1
+	do
+		if [ ! -e "$i" ]
+		then
+			echo Missing File: "$i"
+			echo Aborting.
+			exit
+		fi
+		echo '  '"$i"
+		zip -q -x "$IGNORELIST" -r -u "$ZIPNAME" "$i"
+	done
+
+	## Second step: Zip pick place data and bom
+	case "$FUNC" in
+		ASM)
+			## Generate list of project files to zip; 
+			## this may be run several times
+			local BOMPATH=""
+			local PPPATH=""
+			local ASMDOCPATH=""
+			eval PPPATH="$DEFPPPATH"
+			eval ASMDOCPATH="$DEFASMDOCPATH"
+			eval BOMPATH="$DEFBOMPATH"
+			eval prjfileslist="$DEFPRJFILESLIST"
+			IFS=$':'
+			local i
+			for i in $prjfileslist $SPECFILE2
+			do
+				if [ ! -e "$i" ]
+				then
+					echo Missing File: "$i"
+					echo Aborting.
+					exit
+				fi
+				echo '  '"$i"
+				zip -q -x "$IGNORELIST" -r -u "$ZIPNAME" "$i"
+			done
+		;;
+	esac
+	echo 'Done.'
+}
+
+
+## Convert an excel document into a nice and readable pdf table using htmldoc
+## -------------------------------------------------------------------------------------------------
+function bom2pdf ()
+{
+	local CURPRJNMBR="$1"
+        local DOCNAME="${CURPRJNMBR}${SEP}${BOMDESC}${BOMDOCEXT}"
+        local HTMLNAME="${CURPRJNMBR}${SEP}${BOMDESC}${SEP}HTML${HTMLEXT}"
+        local PDFNAME="${CURPRJNMBR}${SEP}${BOMDESC}${PDFEXT}"
+	local BOMPATH=""
+	eval BOMPATH="$DEFBOMPATH"
+	cd "$BOMPATH"
+
+	for name in $DOCNAME $HTMLNAME; do
+		if [ ! -e $name ]; then
+			echo
+			echo "Warning: No document ${name} found."
+			exit
+		fi
+	done
+
+	## Reformat Altiums html output
+	## Remove outer table, reset color, make fields wrappable, set title
+	sed -i "/<TABLE BORDER=1 CELLSPACING=0 CELLPADDING=1 BGCOLOR=#C0C0C0><TR><TD>/d" "$HTMLNAME"
+	sed -i "/<\/TD><\/TR><\/TABLE>/d" "$HTMLNAME"
+	sed -i "s/C0C0C0/FFFFFF/" "$HTMLNAME"
+	sed -i "/NOWRAP/{s/NOWRAP //}" "$HTMLNAME"
+	sed -i "s/MainGrid/Laytec ${CURPRJNMBR} Rev-${REV}/" "$HTMLNAME"
+
+	## Create pdf from html
+        echo
+        echo 'Creating '"$PDFNAME"' from '"${HTMLNAME}"'...'
+	$HTMLDOC --quiet --webpage --bodyfont Arial --headingfont Arial --continuous\
+	       	--fontsize 9 --size 297x210mm --left 10mm --right 10mm --top 10mm\
+		-f "$PDFNAME" "$HTMLNAME"
+	cd "$WORKPATH"
+	echo 'Done.'
+}
+
+## Compare the number of layers in Gerber output with documentation
+function check_gerber ()
+{
+	eval PCBPATH="${DEFPCBPATH}"
+	eval PCBVARS="$DEFPCBVARSTEX"
+	GERBPATH="GerberX2"
+	FABRPATH="${WORKPATH}/${PCBPATH}"
+	LAYERS=$(ls "${FABRPATH}/${GERBPATH}" | grep Copper | wc -l)
+	echo
+	echo "Checking on layers..."
+	grep -q "\\PCBLAYERS {$LAYERS}" "${PRJPATH}/${PCBVARS}"
+	if [[ $? -eq 0 ]]; then
+		echo "Found $LAYERS layers in Gerber output and documentation."
+	else
+		echo "Error: Number of layers in Gerber output ($LAYERS) differs from documentation."
+		exit
+	fi
+}
+
+
+## Run the script
+## =================================================================================================
+
+## Get help if needed and evaluate working paths
+help "$ARG"
+setpaths "$ARG"
+
+## Check for existing erp info or create new, if not existing
+## Set global vars 'BRDNMBR' and 'PRJNMBR'
+erpinfo
+
+echo
+echo "  --------------------------------------------------"
+echo "   PCB Fabrication: ${BRDNMBR}${SEP}${REVPRE}${REV}"
+echo "  --------------------------------------------------"
+
+## Rename folder Fabrication to Fabrication $BRDNMBR, since Altium doesn't do it by default
+if [ -d "$WORKPATH/Fabrication" ]; then
+	eval PCBPATH="${DEFPCBPATH}"
+	rm -rf "${WORKPATH}/${PCBPATH}"
+	mv "${WORKPATH}/Fabrication" "${WORKPATH}/${PCBPATH}"
+fi
+
+## Create a new spec document from template or edit, if existing
+maketex PCB ""
+
+check_gerber 
+
+## Create zip package for pcb manufacturer
+zippkg PCB "$BRDNMBR"
+
+## Copy this to released folder
+release "$WORKPATH" "${BRDNMBR}" ".zip"
+
+## If there exists ERP project number, assuming that there is assembly data
+## and thus, create assembly zip package as well
+if [ "$PRJNMBR" != "" ] && [ "$PRJNMBR" != "--" ]
+then
+        IFS=$' '
+        for CURPRJNMBR in $PRJNMBR
+        do
+                echo
+                echo "  --------------------------------------------------"
+                echo "   PCB Assembly: ${CURPRJNMBR}${SEP}${REVPRE}${REV}"
+                echo "  --------------------------------------------------"
+
+		## Create a new spec document from template or edit, if existing
+		maketex ASM "${CURPRJNMBR}"
+
+                ## Create pdf from html bom document
+                bom2pdf "${CURPRJNMBR}"
+
+                ## Create zip package for pcb manufacturing and assembly
+                zippkg ASM "${CURPRJNMBR}"
+
+                ## Release manufacturing data
+                release "${WORKPATH}" "${CURPRJNMBR}" ".zip"
+
+                ## Release schematics
+		eval SCHPATH="$DEFSCHPATH"
+                release "${SCHPATH}" "${CURPRJNMBR}" "${SEP}${ALTIUMSCHEXT}"
+        done
+fi
+
+## Clean up
+cleanup
+
