@@ -5,7 +5,7 @@
 ## Usage: Enter the Altium project's directory and run: pack-and-release <Revision>
 ## Suggested Altium output jobs: Laytec_Std_Unified.OutJob and Laytec_Std_Unified-NoRM.OutJob
 ## AF 22/02/2017
-VERSION=16-01-2018
+VERSION=27-07-2018
 
 ## Settings
 ## =================================================================================================
@@ -15,7 +15,8 @@ ARG="$1"
 
 ## Define working directorys
 PRJPATH="$(pwd)"
-DEFWORKPATH='"${PRJPATH}/${REVPRE}${REV}/${OUTPUTPATH}"'
+#DEFWORKPATH='"${PRJPATH}/${REVPRE}${REV}/${OUTPUTPATH}"'
+DEFWORKPATH='"${PRJPATH}/PCB/${OUTPUTPATH}"'
 
 ## File to read / store ERP info
 ERPFILE="${PRJPATH}/.erpinfo"
@@ -24,7 +25,7 @@ ERPFILE="${PRJPATH}/.erpinfo"
 RELEASEDPATH="/ltfs/bureau/Produkte/Dokumente/Technische Zeichnungen/RELEASED/"
 
 ## Define revision prefix
-REVPRE="rev-"
+REVPRE=""
 
 ## Define other programs to use
 EDITOR=vim
@@ -133,13 +134,15 @@ function setpaths ()
         ## Check if revision exists
         if [ ! -e ${PRJPATH}/${ARG} ]
         then
-                echo Error: Revision "$ARG" not found. Exiting.
+                echo Error: "$ARG" not found. Exiting.
                 echo
                 exit
         fi
 
 	## Now since Revision $arg exists, generate global $REV and $WORKPATH
-	REV=$(sed "s/$REVPRE//" <<< $ARG)
+	#REV=$(sed "s/$REVPRE//" <<< $ARG)
+	## grep -o strips Windows' line break
+	REV=$(grep -1 "Name=Rev" PCB/*.PrjPcb | grep -o "Value=." | sed 's/.*Value=//')
 	eval WORKPATH="$DEFWORKPATH"
 	## Escape spaces in paths
 	PRJPATH=$(echo $PRJPATH | sed 's/ /\ /g')
@@ -198,12 +201,12 @@ function release ()
 	local FILEEXT="$3"
 	local PREVREV=$(echo $REV | tr 'b-z' 'a-y')
 	local FILE="${NMBR}${SEP}${REVPRE}${REV}${FILEEXT}"
-	local PREVFILE1="${NMBR}${SEP}${REVPRE}${PREVREV}${FILEEXT}" PREVFILE2="${NMBR}${FILEEXT}"
+	local PREVFILE1="${NMBR}${SEP}${REVPRE}${PREVREV}${FILEEXT}" PREVFILE2="${NMBR}-rev-${PREVREV}${FILEEXT}"
 	local BETAFILE1="p${FILE}" BETAFILE2="p${NMBR}${FILEEXT}"
 
         if [ -e "$DIR/$FILE" ]
         then
-                echo
+		echo
                 echo "Release ${DIR}/${FILE}?"
                 local yn
                 select yn in "Yes" "Skip" "Prototype";
@@ -233,9 +236,10 @@ function release ()
                                 Skip)
                                         break;;
 				Prototype)
-					cp "${DIR}/${FILE}" "${RELEASEDPATH}/${BETAFILE}"
+					cp "${DIR}/${FILE}" "${RELEASEDPATH}/${BETAFILE1}"
 					sed -i "s/RELEASEDREV\=.*/RELEASEDREV\=proto/" "$ERPFILE"
-					echo 'Done. '
+					echo
+					echo "Released as ${BETAFILE1}."
 					break;;
                         esac
                 done
@@ -549,7 +553,7 @@ check_gerber
 zippkg PCB "$BRDNMBR"
 
 ## Copy this to released folder
-release "$WORKPATH" "${BRDNMBR}" ".zip"
+release "${WORKPATH}" "${BRDNMBR}" ".zip"
 
 ## If there exists ERP project number, assuming that there is assembly data
 ## and thus, create assembly zip package as well
