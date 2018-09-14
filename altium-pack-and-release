@@ -16,7 +16,7 @@ ARG="$1"
 ## Define working directorys
 PRJPATH="$(pwd)"
 #DEFWORKPATH='"${PRJPATH}/${REVPRE}${REV}/${OUTPUTPATH}"'
-DEFWORKPATH='"${PRJPATH}/PCB/${OUTPUTPATH}"'
+DEFWORKPATH='"${PRJPATH}/${OUTPUTPATH}"'
 
 ## File to read / store ERP info
 ERPFILE="${PRJPATH}/.erpinfo"
@@ -140,13 +140,14 @@ function setpaths ()
         fi
 
 	## Now since Revision $arg exists, generate global $REV and $WORKPATH
-	#REV=$(sed "s/$REVPRE//" <<< $ARG)
-	## grep -o strips Windows' line break
-	REV=$(grep -1 "Name=Rev" PCB/*.PrjPcb | grep -o "Value=." | sed 's/.*Value=//')
 	eval WORKPATH="$DEFWORKPATH"
+	
 	## Escape spaces in paths
 	PRJPATH=$(echo $PRJPATH | sed 's/ /\ /g')
 	WORKPATH=$(echo $WORKPATH | sed 's/ /\ /g')
+
+	## grep -o strips Windows' line break
+	REV=$(grep -i -1 "Name=Rev" ${PRJPATH}/*.PrjPCB | grep -o "^Value=.*$" | sed 's/.*Value=//' | sed 's/\r//')
 }
 
 ## Read the project's ERP number(s) or set them, if none
@@ -171,6 +172,9 @@ function erpinfo ()
 		for i in $PRJNMBR; do
 			echo $i
 		done
+		echo
+		echo 'Revision found:'
+		echo "$REV"
 		echo
 		if [ -z $RELEASEDREV ]
 		then
@@ -199,11 +203,13 @@ function release ()
         local DIR="$1"
         local NMBR="$2"
 	local FILEEXT="$3"
-	local PREVREV=$(echo $REV | tr 'b-z' 'a-y')
+	local PREVREV=$(echo $REV | tr 'b-z' 'a-y' | tr 'B-Z' 'A-Y')
+	if [[ $PREVREV == $REV ]]; then
+		PREVREV="none"
+	fi
 	local FILE="${NMBR}${SEP}${REVPRE}${REV}${FILEEXT}"
 	local PREVFILE1="${NMBR}${SEP}${REVPRE}${PREVREV}${FILEEXT}" PREVFILE2="${NMBR}-rev-${PREVREV}${FILEEXT}"
 	local BETAFILE1="p${FILE}" BETAFILE2="p${NMBR}${FILEEXT}"
-
         if [ -e "$DIR/$FILE" ]
         then
 		echo
