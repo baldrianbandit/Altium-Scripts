@@ -1,0 +1,8 @@
+*.zip
+*.htm
+**/__Previews
+**/Outputs
+**/Project\ Outputs*
+**/Logs
+**/Project\ Logs*
+**/History
