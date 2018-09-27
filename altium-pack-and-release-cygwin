@@ -1,11 +1,11 @@
-#!/usr/bin/sh
+#!//usr/bin/sh
 ## This script packs Altium PCB manufacturing data, assembly data and docs into zip files according
 ## to Laytec's ERP numbers. Brderp is the number of the PCB itself, while PRJNMBR ist the number of
 ## the assembled PCB.
-## Usage: Enter the Altium project's directory and run: pack-and-release <Revision>
-## Suggested Altium output jobs: Laytec_Std_Unified.OutJob and Laytec_Std_Unified-NoRM.OutJob
+## Usage: Enter the Altium project's directory and run: altium-pack-and-release .
+# Suggested Altium output jobs: Laytec_Std_Fabrication.OutJob and Laytec_Std_Assembly.OutJob
 ## AF 22/02/2017
-VERSION=16-01-2018
+VERSION=27-07-2018
 
 ## Settings
 ## =================================================================================================
@@ -14,22 +14,21 @@ VERSION=16-01-2018
 ARG="$1"
 
 ## Define working directorys
-PRJPATH="$(pwd)"
-DEFWORKPATH='"${PRJPATH}/${REVPRE}${REV}/${OUTPUTPATH}"'
+DEFWORKPATH='"${PRJPATH}/${OUTPUTPATH}"'
 
 ## File to read / store ERP info
-ERPFILE="${PRJPATH}/.erpinfo"
+DEFERPFILE='"${PRJPATH}/.erpinfo"'
 
 ## Define Laytec release path
 RELEASEDPATH="/ltfs/bureau/Produkte/Dokumente/Technische Zeichnungen/RELEASED/"
 
 ## Define revision prefix
-REVPRE="rev-"
+REVPRE=""
 
 ## Define other programs to use
-EDITOR=vim
-SOFFICE=soffice
-HTMLDOC=htmldoc
+EDITOR=/usr/bin/vim
+SOFFICE=/usr/bin/soffice
+HTMLDOC=/usr/bin/htmldoc
 
 ## Define file extensions
 ALTIUMPDFEXT=".PDF"
@@ -62,7 +61,7 @@ TOPRENDER="Rendering-Top${ALTIUMPDFEXT}"
 BOTRENDER="Rendering-Bottom${ALTIUMPDFEXT}"
 
 ## Define Tex paths
-TEXTEMPLATEPATH="/cygdrive/r/Software/Tex/pcb-spec-template"
+TEXTEMPLATEPATH="/ltfs/rnd/Software/Tex/pcb-spec-template"
 PCBTEXTEMPLATE="pcb-spec-template"
 PCBVARTEMPLATE="pcb-spec-variables"
 ASMTEXTEMPLATE="assembly-spec-template"
@@ -94,8 +93,7 @@ DEFIGNOREFILESLIST='"*.OutputStatus":"Status Report.*":"*Renderings*"'
 ## Help
 function help ()
 {
-	local ARG="$1"
-        case "$ARG" in
+        case "$1" in
                 --help|-h)
                         echo Laytec pack-and-release script for Altium\'s PCB manufacturing\
                                 and assembly data.
@@ -129,21 +127,26 @@ function help ()
 ## WORKPATH is the output folder, to which Altium outputs the fabrication data, e.g. $PRJPATH/rev-a/Outputs
 function setpaths ()
 {
-	local ARG="$1"
-        ## Check if revision exists
-        if [ ! -e ${PRJPATH}/${ARG} ]
-        then
-                echo Error: Revision "$ARG" not found. Exiting.
-                echo
-                exit
-        fi
+	## Escape spaces in path
+	local ARG
+	ARG=$(sed 's/ /\ /' <<< $1)
 
-	## Now since Revision $arg exists, generate global $REV and $WORKPATH
-	REV=$(sed "s/$REVPRE//" <<< $ARG)
+	## Generate global PRJPATH
+	if [ -d $ARG ]
+	then
+		PRJPATH="$ARG"
+	else
+		echo
+		echo "Error: Path $ARG not available."
+		exit 1
+	fi
+
+	## Generate global WORKPATH, ERPFILE
 	eval WORKPATH="$DEFWORKPATH"
-	## Escape spaces in paths
-	PRJPATH=$(echo $PRJPATH | sed 's/ /\ /g')
-	WORKPATH=$(echo $WORKPATH | sed 's/ /\ /g')
+	eval ERPFILE="$DEFERPFILE"
+
+	## Strip Windows' line break and generate global REV
+	REV=$(grep -i -1 "Name=Rev" ${PRJPATH}/*.PrjPCB | grep -o "^Value=.*$" | sed 's/.*Value=//' | sed 's/\r//')
 }
 
 ## Read the project's ERP number(s) or set them, if none
@@ -160,20 +163,23 @@ function erpinfo ()
         if [ ! -z "$PRJNMBR" ] && [ ! -z "$BRDNMBR" ]
         then
 		echo
-                echo 'PCB ERP number found:'
+                echo 'PCB ERP number:'
 		echo "$BRDNMBR"
 		echo
-                echo 'Assembly ERP numbers found:'
+                echo 'Assembly ERP numbers:'
 		local i; IFS=$' '
 		for i in $PRJNMBR; do
 			echo $i
 		done
 		echo
+		echo 'Project revision:'
+		echo "$REV"
+		echo
 		if [ -z $RELEASEDREV ]
 		then
 			echo "RELEASEDREV=none" >> "$ERPFILE"
 		fi
-		echo 'Currently released revision:'
+		echo 'Released revision:'
 		echo "${REVPRE}${RELEASEDREV}"
         else
 		echo
@@ -196,30 +202,49 @@ function release ()
         local DIR="$1"
         local NMBR="$2"
 	local FILEEXT="$3"
-	local PREVREV=$(echo $REV | tr 'b-z' 'a-y')
+	local PREVREV=$(echo $REV | tr 'b-z' 'a-y' | tr 'B-Z' 'A-Y')
+	if [[ $PREVREV == $REV ]]; then
+		PREVREV="none"
+	fi
 	local FILE="${NMBR}${SEP}${REVPRE}${REV}${FILEEXT}"
-	local PREVFILE1="${NMBR}${SEP}${REVPRE}${PREVREV}${FILEEXT}" PREVFILE2="${NMBR}${FILEEXT}"
+
+	## Generate possible file names of prototypes or old releases
+	local PREVFILE1="${NMBR}${SEP}${REVPRE}${PREVREV}${FILEEXT}" PREVFILE2="${NMBR}-rev-${PREVREV}${FILEEXT}"
 	local BETAFILE1="p${FILE}" BETAFILE2="p${NMBR}${FILEEXT}"
 
+	## Check if RELEASEDATH is available
+	if [ ! -d $RELEASEDPATH ]
+	then
+		echo
+		echo "Error: Release directory not available."
+		exit 1
+	fi
+	
+	## Check if file exists and begin release
         if [ -e "$DIR/$FILE" ]
         then
-                echo
+		echo
                 echo "Release ${DIR}/${FILE}?"
-                local yn
-                select yn in "Yes" "Skip" "Prototype";
+                local ANSWER 
+                select ANSWER in "Release" "Skip" "Prototype";
                 do
-                        case $yn in
-                                Yes)
-                                        cp "${DIR}/${FILE}" "$RELEASEDPATH"
+                        case $ANSWER in
+
+                                Release)
+					## Release file and update ERPFILE
+                                        cp "${DIR}/${FILE}" "$RELEASEDPATH" 
 					sed -i "s/RELEASEDREV\=.*/RELEASEDREV\=$REV/" "$ERPFILE"
                                         echo 'Done.'
+
+					## Handle previous releases
 					for ITEM in $BETAFILE1 $BETAFILE2 $PREVFILE1 $PREVFILE2; do
 						if [ -e $RELEASEDPATH/$ITEM ]; then
 							echo
 							echo "Remove previous release ${ITEM}?"
-							select yn in "Yes" "No";
+							local YN
+							select YN in "Yes" "No";
 							do
-								case $yn in
+								case $YN in
 									Yes)
 										rm "${RELEASEDPATH}/${ITEM}"
 										break;;
@@ -230,14 +255,21 @@ function release ()
 						fi
 					done
                                         break;;
+
                                 Skip)
                                         break;;
+
 				Prototype)
-					cp "${DIR}/${FILE}" "${RELEASEDPATH}/${BETAFILE1}"
-					sed -i "s/RELEASEDREV\=.*/RELEASEDREV\=proto/" "$ERPFILE"
+					## Release as prototype and update ERPFILE
+					cp "${DIR}/${FILE}" "${RELEASEDPATH}/${BETAFILE1}" 
+					sed -i "s/RELEASEDREV\=.*/RELEASEDREV\=Prototype/" "$ERPFILE"
+					echo
 					echo "Released as ${BETAFILE1}."
 					break;;
                         esac
+
+			## Remove archive so it won't be used accidently in further runs
+			rm "${DIR}/${FILE}"
                 done
         fi
 }
@@ -266,7 +298,7 @@ function maketex ()
 
         ## Create temporary dir with tex templates for pdf generation
 	mkdir -p "$TEXTMP"
-        cp -r "${TEXTEMPLATEPATH}/." "$TEXTMP/"
+        cp -r "${TEXTEMPLATEPATH}/." "${TEXTMP}/"
 
 	## Put revision info into tex file
 	echo "\def \REV {$REV}" > "${TEXTMP}/revision.tex"
@@ -276,28 +308,28 @@ function maketex ()
 	case $DOCTYPE in
 		PCB)
 			local curvars=$PCBVARS
-			local curtemplate=${PCBVARTEMPLATE}
+			local curtemplate=$PCBVARTEMPLATE
 			local currenderings=$PCBRENDERINGS
 			local curnmbr=$BRDNMBR
 			;;
 		ASM)
 			local curvars=$ASMVARS
-			local curtemplate=${ASMVARTEMPLATE}
+			local curtemplate=$ASMVARTEMPLATE
 			local currenderings=$ASMRENDERINGS
 			local curnmbr=$CURPRJNMBR
 			;;
 	esac
 
-        ## Check for existing spec document
+        ## Check for existing spec sheet
         if [ -e $curvars ]
         then
                 echo
-                echo Existing document found: "$curvars". Edit?
-                local yn
-                select yn in "Yes" "No"
+                echo Existing spec sheet found: "$curvars".
+                local ANSWER
+                select ANSWER in "Edit" "Skip" "Quit"
                 do
-                        case "$yn" in
-                                Yes)	
+                        case "$ANSWER" in
+                                Edit)	
 					echo
                                         echo 'Edit '"$curvars"' and select Ready.'
                                         "$EDITOR" "$curvars"
@@ -308,12 +340,15 @@ function maketex ()
                                               esac
                                         done
                                         break;;
-                                No)     
+                                Skip)     
+					break;;
+				Quit)
+					exit
 					break;;
                         esac
                 done
 
-        ## Or create spec document from template
+        ## Or create spec sheet from template
         else
 		echo
 		echo Info: No spec variables found.
@@ -549,7 +584,7 @@ check_gerber
 zippkg PCB "$BRDNMBR"
 
 ## Copy this to released folder
-release "$WORKPATH" "${BRDNMBR}" ".zip"
+release "${WORKPATH}" "${BRDNMBR}" ".zip"
 
 ## If there exists ERP project number, assuming that there is assembly data
 ## and thus, create assembly zip package as well
